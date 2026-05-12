@@ -1,0 +1,5 @@
+app:
+  runtime:
+    role: web-app
+  seed:
+    enabled: ${APP_SEED_ENABLED:true}

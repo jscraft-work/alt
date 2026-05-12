@@ -1,0 +1,17 @@
+.git
+.gradle
+build
+out
+.idea
+.vscode
+*.iml
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+hs_err_pid*.log
+.github
+docs
+tasks
+*.md

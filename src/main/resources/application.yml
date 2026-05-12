@@ -1,0 +1,101 @@
+spring:
+  application:
+    name: alt
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/alt}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      initialization-fail-timeout: 0
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+    locations: classpath:db/migration
+  jackson:
+    time-zone: Asia/Seoul
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+    properties:
+      hibernate:
+        boot:
+          allow_jdbc_metadata_access: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState
+        liveness:
+          include: livenessState
+  health:
+    db:
+      enabled: false
+
+server:
+  port: ${SERVER_PORT:8081}
+
+app:
+  timezone: Asia/Seoul
+  runtime:
+    role: web-app
+  auth:
+    jwt-secret: ${AUTH_JWT_SECRET:change-this-jwt-secret-change-this-jwt-secret}
+    trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:}
+  llm:
+    openclaw:
+      command: ${LLM_OPENCLAW_COMMAND:/usr/local/bin/openclaw}
+      timeout-seconds: ${LLM_OPENCLAW_TIMEOUT_SECONDS:60}
+    nanobot:
+      command: ${LLM_NANOBOT_COMMAND:/usr/local/bin/nanobot}
+      timeout-seconds: ${LLM_NANOBOT_TIMEOUT_SECONDS:60}
+  telegram:
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    chat-id: ${TELEGRAM_CHAT_ID:}
+    base-url: ${TELEGRAM_BASE_URL:https://api.telegram.org}
+    timeout-seconds: ${TELEGRAM_TIMEOUT_SECONDS:5}
+  dart:
+    api-key: ${DART_API_KEY:}
+    base-url: ${DART_BASE_URL:https://opendart.fss.or.kr}
+    timeout-seconds: ${DART_TIMEOUT_SECONDS:10}
+  naver:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+    base-url: ${NAVER_BASE_URL:https://openapi.naver.com}
+    search-timeout-seconds: ${NAVER_SEARCH_TIMEOUT_SECONDS:8}
+    article-timeout-seconds: ${NAVER_ARTICLE_TIMEOUT_SECONDS:8}
+    display-limit: ${NAVER_DISPLAY_LIMIT:30}
+  yfinance:
+    base-url: ${YFINANCE_BASE_URL:https://query1.finance.yahoo.com}
+    per-ticker-timeout-seconds: ${YFINANCE_PER_TICKER_TIMEOUT_SECONDS:6}
+    parallelism: ${YFINANCE_PARALLELISM:6}
+  kis:
+    app-key: ${KIS_APP_KEY:}
+    app-secret: ${KIS_APP_SECRET:}
+    base-url: ${KIS_BASE_URL:https://openapi.koreainvestment.com:9443}
+    environment: ${KIS_ENVIRONMENT:real}
+    rest-timeout-seconds: ${KIS_REST_TIMEOUT_SECONDS:8}
+    token-timeout-seconds: ${KIS_TOKEN_TIMEOUT_SECONDS:10}
+    token-safety-margin-seconds: ${KIS_TOKEN_SAFETY_MARGIN_SECONDS:300}
+    websocket:
+      enabled: ${KIS_WS_ENABLED:false}
+      ws-url: ${KIS_WS_URL:ws://ops.koreainvestment.com:21000}
+      approval-timeout-seconds: ${KIS_WS_APPROVAL_TIMEOUT_SECONDS:10}
+      approval-safety-margin-seconds: ${KIS_WS_APPROVAL_SAFETY_MARGIN_SECONDS:3600}
+      connect-timeout-seconds: ${KIS_WS_CONNECT_TIMEOUT_SECONDS:10}
+      reconnect-initial-backoff-millis: ${KIS_WS_RECONNECT_INITIAL_BACKOFF_MILLIS:1000}
+      reconnect-max-backoff-millis: ${KIS_WS_RECONNECT_MAX_BACKOFF_MILLIS:30000}
+      ping-interval-seconds: ${KIS_WS_PING_INTERVAL_SECONDS:30}
