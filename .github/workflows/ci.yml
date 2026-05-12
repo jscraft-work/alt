@@ -10,6 +10,9 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +22,8 @@ jobs:
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: backend
 
       - run: ./gradlew test
 
@@ -39,7 +44,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: backend
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:latest
