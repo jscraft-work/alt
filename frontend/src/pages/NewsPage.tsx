@@ -5,7 +5,6 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowUpRight, Loader2, RefreshCw } from "lucide-react";
-import { useCurrentUser } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,9 +32,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDisclosureList, useNewsList } from "@/hooks/use-news";
-import { useStrategyInstanceSelection } from "@/hooks/use-strategy-instance-selection";
-import { useSelectableStrategyInstances } from "@/hooks/use-strategy-instances";
-import { useWatchlist } from "@/hooks/use-watchlist";
 import type {
   ApiPagedMeta,
   DisclosureListItem,
@@ -43,7 +39,6 @@ import type {
   NewsUsefulnessStatus,
 } from "@/lib/api-types";
 import { formatKstDateTime, formatNumber } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 const KST_TIME_ZONE = "Asia/Seoul";
@@ -77,16 +72,6 @@ interface DisclosureFilters {
 }
 
 export default function NewsPage() {
-  const { data: currentUser } = useCurrentUser();
-  const { selectedInstanceId, setSelectedInstanceId } =
-    useStrategyInstanceSelection();
-  const { data: selectableInstances, isLoading: isInstancesLoading } =
-    useSelectableStrategyInstances();
-  const selectedInstance =
-    selectableInstances?.find((instance) => instance.id === selectedInstanceId) ??
-    null;
-  const watchlistQuery = useWatchlist(currentUser ? selectedInstanceId : null);
-
   const [tab, setTab] = useState<NewsTab>("news");
   const [newsFilters, setNewsFilters] = useState<NewsFilters>(() =>
     createNewsFilters(),
@@ -106,7 +91,6 @@ export default function NewsPage() {
     useState<DisclosureListItem | null>(null);
 
   const newsListQuery = useNewsList({
-    strategyInstanceId: selectedInstanceId,
     symbolCode: normalizeTextFilter(appliedNewsFilters.symbolCode),
     usefulnessStatus: normalizeTextFilter(
       appliedNewsFilters.usefulnessStatus,
@@ -118,7 +102,6 @@ export default function NewsPage() {
     size: appliedNewsFilters.size,
   });
   const disclosureListQuery = useDisclosureList({
-    strategyInstanceId: selectedInstanceId,
     symbolCode: normalizeTextFilter(appliedDisclosureFilters.symbolCode),
     dartCorpCode: normalizeTextFilter(appliedDisclosureFilters.dartCorpCode),
     dateFrom: appliedDisclosureFilters.dateFrom,
@@ -131,8 +114,6 @@ export default function NewsPage() {
   const activeMeta = activeListQuery.data?.meta ?? null;
   const isActiveRefreshing =
     activeListQuery.isFetching && !activeListQuery.isPending;
-  const activeSymbolCode =
-    tab === "news" ? newsFilters.symbolCode : disclosureFilters.symbolCode;
 
   const onSubmitFilters = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -187,23 +168,6 @@ export default function NewsPage() {
     setAppliedDisclosureFilters((prev) => ({ ...prev, page: nextPage }));
   };
 
-  const applyQuickSymbolFilter = (symbolCode: string) => {
-    if (tab === "news") {
-      const next = { ...newsFilters, symbolCode, page: 1 };
-      setNewsFilters(next);
-      setAppliedNewsFilters(next);
-      return;
-    }
-
-    const next = { ...disclosureFilters, symbolCode, page: 1 };
-    setDisclosureFilters(next);
-    setAppliedDisclosureFilters(next);
-  };
-
-  const clearQuickSymbolFilter = () => {
-    applyQuickSymbolFilter("");
-  };
-
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -246,9 +210,6 @@ export default function NewsPage() {
           }}
           label="공시"
         />
-        <span className="text-xs text-muted-foreground">
-          전역 인스턴스 선택은 API 필터로 자동 반영됩니다.
-        </span>
       </div>
 
       <Card>
@@ -256,40 +217,13 @@ export default function NewsPage() {
           <CardTitle>조회 필터</CardTitle>
           <CardDescription>
             {tab === "news"
-              ? "전략 인스턴스, 기간, 종목, 유용성 상태, 제목 검색어 기준으로 조회합니다."
-              : "전략 인스턴스, 기간, 종목 코드, DART 법인 코드 기준으로 조회합니다."}
+              ? "기간, 종목, 유용성 상태, 제목 검색어 기준으로 조회합니다."
+              : "기간, 종목 코드, DART 법인 코드 기준으로 조회합니다."}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="flex flex-col gap-4" onSubmit={onSubmitFilters}>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-6">
-              <FilterField label="전략 인스턴스" htmlFor="news-instance">
-                <div className="relative">
-                  <select
-                    id="news-instance"
-                    className={cn(
-                      "h-8 w-full rounded-lg border border-input bg-background px-2.5 pr-8 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                      isInstancesLoading && "text-muted-foreground",
-                    )}
-                    value={selectedInstanceId ?? ""}
-                    onChange={(event) => {
-                      setSelectedInstanceId(event.target.value || null);
-                    }}
-                    disabled={isInstancesLoading}
-                  >
-                    <option value="">전체 전략</option>
-                    {(selectableInstances ?? []).map((instance) => (
-                      <option key={instance.id} value={instance.id}>
-                        {instance.name}
-                      </option>
-                    ))}
-                  </select>
-                  {isInstancesLoading && (
-                    <Loader2 className="pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-              </FilterField>
-
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
               <FilterField label="시작일" htmlFor="news-date-from">
                 <Input
                   id="news-date-from"
@@ -431,21 +365,6 @@ export default function NewsPage() {
               <Button type="submit">조회</Button>
             </div>
           </form>
-
-          {selectedInstanceId && (
-            <WatchlistQuickFilterCard
-              instanceName={selectedInstance?.name ?? selectedInstanceId}
-              activeSymbolCode={activeSymbolCode}
-              currentUserLoaded={currentUser !== undefined}
-              isLoggedIn={!!currentUser}
-              isLoading={watchlistQuery.isLoading}
-              errorMessage={watchlistQuery.error?.message ?? null}
-              rows={watchlistQuery.data ?? []}
-              fallbackCount={selectedInstance?.watchlistCount ?? null}
-              onSelect={applyQuickSymbolFilter}
-              onClear={clearQuickSymbolFilter}
-            />
-          )}
         </CardContent>
       </Card>
 
@@ -635,100 +554,6 @@ function DisclosureTable({
         </Table>
       </CardContent>
     </Card>
-  );
-}
-
-function WatchlistQuickFilterCard({
-  instanceName,
-  activeSymbolCode,
-  currentUserLoaded,
-  isLoggedIn,
-  isLoading,
-  errorMessage,
-  rows,
-  fallbackCount,
-  onSelect,
-  onClear,
-}: {
-  instanceName: string;
-  activeSymbolCode: string;
-  currentUserLoaded: boolean;
-  isLoggedIn: boolean;
-  isLoading: boolean;
-  errorMessage: string | null;
-  rows: { symbolCode: string; symbolName: string | null }[];
-  fallbackCount: number | null;
-  onSelect: (symbolCode: string) => void;
-  onClear: () => void;
-}) {
-  const totalCount = rows.length > 0 ? rows.length : fallbackCount;
-
-  return (
-    <div className="mt-4 flex flex-col gap-3 rounded-xl border bg-muted/20 p-4">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">감시종목 빠른 필터</span>
-            <Badge variant="outline">{instanceName}</Badge>
-            {totalCount !== null && (
-              <Badge variant="outline">감시종목 {formatNumber(totalCount)}개</Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            선택된 전략 인스턴스는 API 기본 필터로 적용되며, 아래 버튼으로 종목을
-            추가 좁힘할 수 있습니다.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onClear}
-          disabled={!activeSymbolCode}
-        >
-          종목 해제
-        </Button>
-      </div>
-
-      {!currentUserLoaded || isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          감시종목을 불러오는 중...
-        </div>
-      ) : !isLoggedIn ? (
-        <p className="text-sm text-muted-foreground">
-          비로그인 상태에서는 감시종목 버튼 목록을 불러올 수 없어, 인스턴스 기본
-          필터만 적용합니다.
-        </p>
-      ) : errorMessage ? (
-        <p className="text-sm text-destructive">
-          감시종목 조회 실패: {errorMessage}
-        </p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          등록된 감시종목이 없습니다.
-        </p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {rows.map((row) => {
-            const active = activeSymbolCode === row.symbolCode;
-            return (
-              <Button
-                key={row.symbolCode}
-                type="button"
-                variant={active ? "default" : "outline"}
-                size="sm"
-                onClick={() => onSelect(row.symbolCode)}
-              >
-                {row.symbolName ?? row.symbolCode}
-                {row.symbolName ? (
-                  <span className="text-xs opacity-80">{row.symbolCode}</span>
-                ) : null}
-              </Button>
-            );
-          })}
-        </div>
-      )}
-    </div>
   );
 }
 

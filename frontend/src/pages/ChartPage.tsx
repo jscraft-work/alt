@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import MinuteChart from "@/components/chart/MinuteChart";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAssetMasters } from "@/hooks/use-asset-masters";
 import { useOrderOverlays, useMinuteBars } from "@/hooks/use-charts";
 import { useStrategyInstanceSelection } from "@/hooks/use-strategy-instance-selection";
 import { useSelectableStrategyInstances } from "@/hooks/use-strategy-instances";
@@ -43,13 +44,36 @@ export default function ChartPage() {
     isLoading: isInstancesLoading,
     error: selectableInstancesError,
   } = useSelectableStrategyInstances();
+  const { data: assets, isLoading: isAssetsLoading } = useAssetMasters({
+    hidden: false,
+  });
   const [filters, setFilters] = useState<ChartFilters>(createInitialFilters);
   const [appliedFilters, setAppliedFilters] = useState<ChartFilters | null>(null);
+
+  // 페이지 진입 시 첫 종목 + 오늘 날짜로 자동 조회.
+  useEffect(() => {
+    if (appliedFilters !== null) return;
+    const first = assets?.[0];
+    if (!first) return;
+    const next = {
+      symbolCode: first.symbolCode,
+      date: getTodayInKst(),
+    };
+    setFilters(next);
+    setAppliedFilters(next);
+  }, [assets, appliedFilters]);
 
   const shouldFetch = appliedFilters !== null;
   const selectedInstance =
     selectableInstances?.find((instance) => instance.id === selectedInstanceId) ??
     null;
+
+  const applySymbol = (symbolCode: string) => {
+    const date = filters.date || getTodayInKst();
+    const next = { symbolCode, date };
+    setFilters(next);
+    setAppliedFilters(next);
+  };
 
   const minuteBarsQuery = useMinuteBars(
     {
@@ -123,11 +147,48 @@ export default function ChartPage() {
         <CardHeader>
           <CardTitle>조회 필터</CardTitle>
           <CardDescription>
-            종목 코드와 날짜는 직접 입력하고, 전략 인스턴스 선택은 주문 오버레이
-            조회 조건으로 반영됩니다.
+            종목을 빠른 선택 버튼으로 고르거나 직접 입력하고, 전략 인스턴스 선택은
+            주문 오버레이 조회 조건으로 반영됩니다.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label>종목 빠른 선택</Label>
+            {isAssetsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                종목 목록을 불러오는 중...
+              </div>
+            ) : !assets || assets.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                등록된 종목이 없습니다.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {assets.map((asset) => {
+                  const active =
+                    appliedFilters?.symbolCode === asset.symbolCode;
+                  return (
+                    <Button
+                      key={asset.symbolCode}
+                      type="button"
+                      variant={active ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => applySymbol(asset.symbolCode)}
+                    >
+                      {asset.symbolName ?? asset.symbolCode}
+                      {asset.symbolName ? (
+                        <span className="text-xs opacity-80">
+                          {asset.symbolCode}
+                        </span>
+                      ) : null}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <form className="flex flex-col gap-4" onSubmit={onSubmit}>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
               <FilterField label="종목 코드" htmlFor="chart-symbol">

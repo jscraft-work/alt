@@ -32,7 +32,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useStrategyInstanceSelection } from "@/hooks/use-strategy-instance-selection";
-import { useSelectableStrategyInstances } from "@/hooks/use-strategy-instances";
 import {
   useTradeDecisionDetail,
   useTradeDecisions,
@@ -98,10 +97,7 @@ interface DecisionFilters {
 }
 
 export default function TradesPage() {
-  const { selectedInstanceId, setSelectedInstanceId } =
-    useStrategyInstanceSelection();
-  const { data: selectableInstances, isLoading: isInstancesLoading } =
-    useSelectableStrategyInstances();
+  const { selectedInstanceId } = useStrategyInstanceSelection();
 
   const [tab, setTab] = useState<TradesTab>("orders");
   const [orderFilters, setOrderFilters] = useState<OrderFilters>(() =>
@@ -250,40 +246,13 @@ export default function TradesPage() {
           <CardTitle>조회 필터</CardTitle>
           <CardDescription>
             {tab === "orders"
-              ? "전략 인스턴스, 기간, 종목 코드, 주문 상태 기준으로 조회합니다."
-              : "전략 인스턴스, 기간, 판단 상태 기준으로 조회합니다."}
+              ? "기간, 종목 코드, 주문 상태 기준으로 조회합니다."
+              : "기간, 판단 상태 기준으로 조회합니다."}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="flex flex-col gap-4" onSubmit={onSubmitFilters}>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-              <FilterField label="전략 인스턴스" htmlFor="trade-instance">
-                <div className="relative">
-                  <select
-                    id="trade-instance"
-                    className={cn(
-                      "h-8 w-full rounded-lg border border-input bg-background px-2.5 pr-8 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                      isInstancesLoading && "text-muted-foreground",
-                    )}
-                    value={selectedInstanceId ?? ""}
-                    onChange={(event) => {
-                      setSelectedInstanceId(event.target.value || null);
-                    }}
-                    disabled={isInstancesLoading}
-                  >
-                    <option value="">전체 전략</option>
-                    {(selectableInstances ?? []).map((instance) => (
-                      <option key={instance.id} value={instance.id}>
-                        {instance.name}
-                      </option>
-                    ))}
-                  </select>
-                  {isInstancesLoading && (
-                    <Loader2 className="pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-              </FilterField>
-
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
               <FilterField label="시작일" htmlFor="trade-date-from">
                 <Input
                   id="trade-date-from"
