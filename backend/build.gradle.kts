@@ -33,6 +33,8 @@ dependencies {
 
     implementation("com.github.kagkarlsson:db-scheduler-spring-boot-starter:16.7.0")
 
+    implementation("io.pebbletemplates:pebble:3.2.4")
+
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
     runtimeOnly("org.postgresql:postgresql")
