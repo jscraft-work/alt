@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,7 +32,11 @@ import work.jscraft.alt.trading.application.decision.TradeDecisionLogService;
 import work.jscraft.alt.trading.application.decision.TradeDecisionLogService.LlmUsage;
 import work.jscraft.alt.trading.application.decision.TradeOrderIntentGenerator;
 import work.jscraft.alt.trading.application.decision.TradingDecisionEngine;
-import work.jscraft.alt.trading.application.inputspec.InputAssembler;
+import work.jscraft.alt.trading.application.inputspec.PromptContextAssembler;
+import work.jscraft.alt.trading.application.inputspec.PromptInputSpec;
+import work.jscraft.alt.trading.application.inputspec.PromptInputSpecException;
+import work.jscraft.alt.trading.application.inputspec.PromptInputSpecParser;
+import work.jscraft.alt.trading.application.inputspec.PromptTemplateEngine;
 import work.jscraft.alt.trading.application.ops.TradingIncidentReporter;
 import work.jscraft.alt.trading.application.order.LiveOrderExecutor;
 import work.jscraft.alt.trading.application.order.PaperOrderExecutor;
@@ -53,7 +58,9 @@ public class CycleExecutionOrchestrator {
     private final TradingWindowPolicy tradingWindowPolicy;
     private final SettingsSnapshotProvider snapshotProvider;
     private final TradeCycleLifecycle lifecycle;
-    private final InputAssembler inputAssembler;
+    private final PromptInputSpecParser promptInputSpecParser;
+    private final PromptContextAssembler promptContextAssembler;
+    private final PromptTemplateEngine promptTemplateEngine;
     private final TradingDecisionEngine decisionEngine;
     private final DecisionParser decisionParser;
     private final TradeDecisionLogService decisionLogService;
@@ -73,7 +80,9 @@ public class CycleExecutionOrchestrator {
             TradingWindowPolicy tradingWindowPolicy,
             SettingsSnapshotProvider snapshotProvider,
             TradeCycleLifecycle lifecycle,
-            InputAssembler inputAssembler,
+            PromptInputSpecParser promptInputSpecParser,
+            PromptContextAssembler promptContextAssembler,
+            PromptTemplateEngine promptTemplateEngine,
             TradingDecisionEngine decisionEngine,
             DecisionParser decisionParser,
             TradeDecisionLogService decisionLogService,
@@ -91,7 +100,9 @@ public class CycleExecutionOrchestrator {
         this.tradingWindowPolicy = tradingWindowPolicy;
         this.snapshotProvider = snapshotProvider;
         this.lifecycle = lifecycle;
-        this.inputAssembler = inputAssembler;
+        this.promptInputSpecParser = promptInputSpecParser;
+        this.promptContextAssembler = promptContextAssembler;
+        this.promptTemplateEngine = promptTemplateEngine;
         this.decisionEngine = decisionEngine;
         this.decisionParser = decisionParser;
         this.decisionLogService = decisionLogService;
@@ -152,16 +163,20 @@ public class CycleExecutionOrchestrator {
             UUID cycleLogId,
             SettingsSnapshot snapshot,
             boolean liveMode) {
+        String renderedPrompt;
         try {
-            inputAssembler.assemble(snapshot);
-        } catch (RuntimeException ex) {
-            log.warn("input assembly failed instance={} message={}", instance.getId(), ex.getMessage());
+            PromptInputSpec inputSpec = promptInputSpecParser.parse(snapshot.promptText());
+            Map<String, Object> ctx = promptContextAssembler.assemble(snapshot, inputSpec);
+            renderedPrompt = promptTemplateEngine.render(inputSpec.body(), ctx);
+        } catch (PromptInputSpecException ex) {
+            log.warn("prompt parse/render failed instance={} message={}",
+                    instance.getId(), ex.getMessage());
             lifecycle.fail(cycleLogId, "INPUT_ASSEMBLY_FAILED", ex.getMessage());
             return CycleResult.failed(cycleLogId, ex.getMessage());
         }
 
         lifecycle.advance(cycleLogId, TradeCycleLifecycle.STAGE_LLM_CALLING);
-        LlmRequest llmRequest = buildLlmRequest(instance, snapshot);
+        LlmRequest llmRequest = buildLlmRequest(instance, snapshot, renderedPrompt);
         LlmCallResult llmResult = decisionEngine.requestTradingDecision(llmRequest);
         JsonNode settingsSnapshotJson = serializeSnapshot(snapshot);
 
@@ -211,7 +226,10 @@ public class CycleExecutionOrchestrator {
         return CycleResult.completed(cycleLogId, decisionLog.getId(), parsed.cycleStatus(), orders);
     }
 
-    private LlmRequest buildLlmRequest(StrategyInstanceEntity instance, SettingsSnapshot snapshot) {
+    private LlmRequest buildLlmRequest(
+            StrategyInstanceEntity instance,
+            SettingsSnapshot snapshot,
+            String renderedPrompt) {
         LlmModelProfileEntity profile = llmModelProfileRepository.findById(snapshot.tradingModelProfileId())
                 .orElseThrow(() -> new IllegalStateException(
                         "tradingModelProfile를 찾을 수 없습니다: " + snapshot.tradingModelProfileId()));
@@ -221,7 +239,7 @@ public class CycleExecutionOrchestrator {
                 UUID.randomUUID(),
                 profile.getProvider(),
                 profile.getModelName(),
-                snapshot.promptText(),
+                renderedPrompt,
                 Duration.ofSeconds(Math.max(1, executable.getTimeoutSeconds())));
     }
 
