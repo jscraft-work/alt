@@ -795,6 +795,9 @@
 }
 ```
 
+비고:
+- `inputSpecOverride`는 deprecated 다. 사이클은 더 이상 이 값을 읽지 않으며, 입력 스펙은 prompt 본문 상단 YAML frontmatter(prompt 메타데이터 블록)로 대체되었다. 호환성 보존을 위해 컬럼/필드는 남아 있다.
+
 ### 8.6 전략 인스턴스 수정
 
 `PATCH /api/admin/strategy-instances/{strategyInstanceId}`
@@ -816,6 +819,7 @@
 비고:
 - 생략한 필드는 기존 값을 유지한다.
 - `brokerAccountId`, `tradingModelProfileId`, `inputSpecOverride`, `executionConfigOverride`에 `null`을 보내면 override 를 해제하고 템플릿 기본값을 사용한다.
+- `inputSpecOverride`는 deprecated 다 (사이클에서 더 이상 읽지 않음, prompt frontmatter로 대체).
 
 ### 8.7 전략 인스턴스 상태 전환
 
@@ -833,6 +837,18 @@
 비고:
 
 - 활성화 가능 조건을 만족하지 않으면 `INSTANCE_NOT_ACTIVATABLE`을 반환한다.
+- 활성 prompt 본문 상단의 YAML frontmatter(prompt 메타데이터 블록) 파싱이 실패하면 활성화는 거절된다. 응답은 `INSTANCE_NOT_ACTIVATABLE` 코드 + `message`에 파싱 실패 사유(예: "prompt frontmatter parse failed: unknown source type 'foo'")를 담아 내려준다.
+
+활성화 거절 응답 예시:
+
+```json
+{
+  "error": {
+    "code": "INSTANCE_NOT_ACTIVATABLE",
+    "message": "prompt frontmatter parse failed: unknown source type 'foo'"
+  }
+}
+```
 
 ### 8.8 전략 인스턴스 복제
 
@@ -946,6 +962,55 @@
 - `GET /api/admin/system-parameters`
 - `PATCH /api/admin/system-parameters/{parameterKey}`
 
+### 8.22 프롬프트 변수 카탈로그
+
+`GET /api/admin/prompt-vocabulary`
+
+- 인증: 필요 (어드민)
+- 목적: 운영자 prompt 작성 화면에서 사용 가능한 frontmatter source 타입과 Pebble 컨텍스트 변수를 보여주는 가이드 카탈로그.
+
+응답:
+
+```json
+{
+  "data": {
+    "systemVariables": [
+      {"name": "current_time", "description": "사이클 시작 시각 (KST)"},
+      {"name": "cash_amount", "description": "현재 현금 잔고"},
+      {"name": "held_positions", "description": "현재 보유 종목 요약"}
+    ],
+    "stocksCollection": {
+      "loopVariable": "stocks",
+      "itemKeys": [
+        {"name": "code", "description": "종목코드"},
+        {"name": "name", "description": "종목명"},
+        {"name": "minute_bars", "description": "분봉 (frontmatter에 minute_bar 선언 시)"},
+        {"name": "fundamental", "description": "펀더멘털"},
+        {"name": "news", "description": "뉴스"},
+        {"name": "disclosures", "description": "공시"},
+        {"name": "orderbook", "description": "장중 호가 스냅샷"}
+      ]
+    },
+    "globalVariables": [
+      {"name": "macro", "description": "매크로 일자 스냅샷 (frontmatter에 macro 선언 시)"}
+    ],
+    "sources": [
+      {"type": "minute_bar", "params": ["lookback_minutes"]},
+      {"type": "fundamental", "params": []},
+      {"type": "news", "params": ["lookback_hours"]},
+      {"type": "disclosure", "params": ["lookback_hours"]},
+      {"type": "macro", "params": []},
+      {"type": "orderbook", "params": []}
+    ]
+  }
+}
+```
+
+비고:
+
+- 응답 값은 백엔드 상수(`PromptInputSpec` 허용 source 타입, `PromptContextAssembler` 컨텍스트 빌더 키)에서 직접 생성한다. 별도 DB 테이블이 아니다.
+- 응답 형식은 가이드 표시용이므로 안정 보장 수준은 화면 가이드 수준이다 (변경 시 frontend 카탈로그 화면이 함께 갱신된다).
+
 ## 9. 운영 보조 API
 
 ### 9.1 audit log 조회
@@ -1016,6 +1081,7 @@
 - `/api/admin/broker-accounts*`
 - `/api/admin/assets*`
 - `/api/admin/system-parameters*`
+- `GET /api/admin/prompt-vocabulary` (prompt 작성 화면 가이드)
 
 ## 11. 구현 시 주의사항
 

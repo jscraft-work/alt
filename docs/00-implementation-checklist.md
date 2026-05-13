@@ -157,7 +157,7 @@
 - [x] 활성화 전 검증 구현
   - [x] 프롬프트 존재
   - [x] 모델 존재
-  - [x] 입력 스펙 존재
+  - [x] 프롬프트 frontmatter 파싱 성공 (구 "입력 스펙 존재" 검증을 대체)
   - [x] 실행 주기 존재
   - [x] 전략 예산 존재
   - [x] `live`면 연결 계좌 존재
@@ -236,7 +236,9 @@
 - [x] 인스턴스별 직렬 실행 보장 — `scheduled_tasks` `(task_name, task_instance)` PK + `picked` 플래그. 외부 Redis 락 미사용 (구 `TradingInstanceLock` 제거)
 - [x] `trade_cycle_log` 생성 및 단계 갱신 구현
 - [x] 판단 시점 설정값 고정 구현
-- [x] 입력 데이터 조립기 구현
+- [x] 프롬프트 frontmatter 기반 입력 데이터 조립기 구현 (`PromptInputSpecParser` → `PromptContextAssembler`; 구 `inputSpec` JSON 기반 조립기 폐기)
+- [x] 프롬프트 frontmatter + Pebble template engine 도입 (`PromptTemplateEngine`, Pebble = Jinja2 호환 Java 템플릿)
+- [x] 프롬프트 변수 카탈로그 API (`GET /api/admin/prompt-vocabulary`)
 - [x] LLM HTTP 호출기 구현 (`LlmHttpAdapter` — 호스트 launchd wrapper `POST /ask`)
 - [x] LLM 응답 파싱 및 내용 검증 구현
 - [x] `trade_decision_log` 기록 구현
@@ -374,3 +376,4 @@
 - [ ] 실 서버에 배포 후 health/사이클 1회 통과 확인
 - [ ] Telegram 실제 chat ID로 LLM/reconcile/auto_paused 알림 발송 — 본문/마스킹/음소거 동작 사람 눈 확인
 - [ ] LLM HTTP wrapper(맥미니 launchd `127.0.0.1:18000`) 실 호출 1회 — `host.docker.internal:18000`이 컨테이너에서 도달하는지 확인
+- [ ] 운영자가 admin UI에서 prompt frontmatter + Pebble template으로 새 인스턴스 활성화 → 사이클 1회 LLM 호출 + `trade_decision_log` 정상 기록 확인

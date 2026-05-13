@@ -59,6 +59,12 @@
   - `scheduled_tasks`에 있으나 위 조건을 만족하지 않는 인스턴스 → `cancel`
 - web-app은 lifecycle 변경 시 DB 컬럼만 갱신하면 충분하다. trading-worker로의 직접 이벤트 전파는 없다(state-based, 분산 시스템 표준 패턴).
 
+### 3.4 프롬프트 입력 스펙 위치
+
+- 프롬프트 입력 스펙(사이클이 모아야 할 소스 종류와 종목 scope)은 별도 JSON 컬럼이 아니라 **prompt 본문 상단의 YAML frontmatter**(prompt 본문 맨 위 `---`로 둘러싸인 메타데이터 블록)로 선언된다.
+- 운영자는 prompt 편집 한 곳에서 입력 스펙과 본문 템플릿을 함께 다룬다. 같은 인스턴스의 다른 prompt 버전은 서로 다른 입력 스펙을 가질 수 있다.
+- 구 `strategy_template.default_input_spec_json` / `strategy_instance.input_spec_override_json` 컬럼은 호환성 보존용이며, 사이클은 더 이상 읽지 않는다.
+
 ## 4. 사이클 상태 요약
 
 실제로 시작된 사이클은 `trade_cycle_log` row 하나로 저장하며, 구현상 다음 상태를 거친다.
@@ -88,6 +94,9 @@
 4. `live`면 `RECONCILE_PENDING`
 5. 판단 시점 설정값 고정
 6. `INPUT_LOADING`
+   - `PromptInputSpecParser`(prompt 상단 frontmatter를 분리해 `PromptInputSpec` 산출)가 활성 prompt 본문을 받아 `sources`/`scope`를 추출
+   - `PromptContextAssembler`(frontmatter에 선언된 소스만 모아 종목별 컨텍스트로 합치는 어셈블러)가 시세/펀더멘털/뉴스/공시/매크로/호가 중 선언된 항목만 조회해 종목별 데이터 묶음 생성
+   - `PromptTemplateEngine`(Pebble; Jinja2 호환 Java 템플릿 엔진)이 본문 템플릿에 system 변수와 `stocks` 컬렉션을 채워 LLM 입력 텍스트를 만든다
 7. `LLM_CALLING`
 8. `DECISION_VALIDATING`
 9. 판단 로그 생성
@@ -101,13 +110,12 @@
 
 사이클 시작 시 아래 값을 확정하고 이후 변경하지 않는다.
 
-- 프롬프트 버전
+- 프롬프트 버전 (frontmatter + 본문 템플릿 일체)
 - 트레이딩 모델 설정
-- 전략 입력 스펙
 - 인스턴스 실행 설정
 - 감시 종목 목록
 
-이 값은 `trade_decision_log.settings_snapshot_json`에 저장한다.
+이 값은 `trade_decision_log.settings_snapshot_json`에 저장한다. 별도 "전략 입력 스펙" 항목은 더 이상 분리 저장하지 않으며, prompt 본문 안의 frontmatter가 그 역할을 겸한다.
 
 ## 6. reconcile 단계
 
@@ -142,27 +150,37 @@ reconcile은 브로커의 실제 주문 상태와 내부 주문 상태를 맞추
 
 ### 7.1 입력 구성 원칙
 
-입력 데이터는 확정된 입력 스펙에 따라 수집한다.
+입력 데이터는 활성 prompt 상단 **frontmatter**에 선언된 `sources`만 모은다. 더 이상 별도 `inputSpec` JSON 컬럼을 읽지 않는다.
 
-예시:
+frontmatter `sources` 허용 타입(소스 타입; 사이클이 어떤 데이터를 모을지 표시):
 
-- 현재가
-- 시장 스냅샷
-- 1분봉
-- 뉴스
-- 공시
-- 매크로
-- 장중 호가 단기 캐시
+- `minute_bar` — 1분봉 (`lookback_minutes`)
+- `fundamental` — 펀더멘털 스냅샷 (기본 키 보유)
+- `news` — 뉴스 (`lookback_hours`)
+- `disclosure` — DART 공시 (`lookback_hours`)
+- `macro` — 매크로 일자 스냅샷 (글로벌, 종목 무관)
+- `orderbook` — 장중 호가 단기 캐시 (Redis)
+
+`scope`는 종목 범위(어떤 종목까지 컨텍스트에 넣을지)다.
+
+- `held_only` — 현재 보유 중인 종목만
+- `full_watchlist` — 인스턴스 감시 종목 전부
 
 ### 7.2 장중 호가 처리
 
 - 장중 호가 원본은 PostgreSQL에 저장하지 않는다.
 - collector-worker가 Redis TTL 2일 데이터로만 유지한다.
-- 사이클은 필요 시 Redis에서 읽어 입력값으로 사용한다.
+- 사이클은 frontmatter에 `orderbook`이 선언된 경우에만 Redis에서 읽어 입력값으로 사용한다.
 
 ### 7.3 입력 실패 처리
 
-필수 입력 데이터 조회 또는 입력 검증에 실패하면:
+다음 중 하나라도 실패하면 `INPUT_ASSEMBLY_FAILED`로 분류한다.
+
+- frontmatter 파싱 실패 (YAML 문법 오류, 허용되지 않은 source 타입 등)
+- `PromptContextAssembler`에서 필수 source 조회 실패
+- `PromptTemplateEngine` 렌더 실패 (Pebble syntax 오류, 정의되지 않은 변수 참조 등)
+
+`INPUT_ASSEMBLY_FAILED` 발생 시:
 
 - 사이클 로그를 `FAILED`로 종료한다.
 - 해당 턴의 판단 로그를 `FAILED`로 기록한다.
@@ -389,7 +407,69 @@ reconcile은 브로커의 실제 주문 상태와 내부 주문 상태를 맞추
 
 운영 알림 채널은 Telegram이다.
 
-## 16. 구현 체크리스트
+## 16. Prompt frontmatter + Pebble template
+
+사이클이 LLM 입력을 만드는 방식은 prompt 본문 자체에 입력 스펙과 본문 템플릿이 함께 들어 있는 구조다.
+
+### 16.1 frontmatter 형식
+
+prompt 본문 맨 위에 `---`로 둘러싼 YAML 블록을 둔다.
+
+```
+---
+sources:
+  - {type: minute_bar, lookback_minutes: 120}
+  - {type: fundamental}
+  - {type: news, lookback_hours: 12}
+scope: full_watchlist
+---
+```
+
+- `sources` 허용 타입: `minute_bar`, `fundamental`, `news`, `disclosure`, `macro`, `orderbook` (총 6종)
+- `scope`: `held_only` 또는 `full_watchlist`
+- `sources`에 선언되지 않은 타입은 어셈블러가 조회하지 않는다.
+
+### 16.2 Pebble 컨텍스트 변수
+
+본문 템플릿은 다음 변수를 사용할 수 있다.
+
+- system 변수 (사이클 단위 글로벌)
+  - `current_time` — 사이클 시작 시각 (KST)
+  - `cash_amount` — 현재 현금 잔고
+  - `held_positions` — 현재 보유 종목 요약
+- `stocks` — 종목 컬렉션. `{% for s in stocks %}` 루프로 순회. 각 항목은 다음 키를 가진 Map.
+  - `code` — 종목코드
+  - `name` — 종목명
+  - `minute_bars` — frontmatter에 `minute_bar` 선언 시 채워짐
+  - `fundamental` — `fundamental` 선언 시 채워짐
+  - `news` — `news` 선언 시 채워짐
+  - `disclosures` — `disclosure` 선언 시 채워짐
+  - `orderbook` — `orderbook` 선언 시 채워짐
+  - 헤더에 선언되지 않은 항목 키는 빈 문자열로 채워진다 (Pebble undefined 회피용).
+- `macro` — frontmatter에 `macro` 선언 시 채워지는 글로벌 변수 (종목 무관 일자 스냅샷)
+
+운영자가 사용 가능한 변수 카탈로그는 `GET /api/admin/prompt-vocabulary`에서 조회한다.
+
+### 16.3 활성화 게이트
+
+인스턴스 활성화 검증은 prompt frontmatter 파싱 가능 여부로 판단한다.
+
+- `PromptInputSpecParser`가 활성 prompt 본문을 파싱해서 `PromptInputSpec`(sources + scope)을 만들 수 있어야 한다.
+- 파싱 실패 시 `INSTANCE_NOT_ACTIVATABLE` 응답으로 활성화가 거절된다.
+- 구 "입력 스펙 JSON 존재" 검증은 제거되었다. `strategy_template.default_input_spec_json` / `strategy_instance.input_spec_override_json` 컬럼은 호환성 보존용이며 v2에서 DROP 예정이다.
+
+### 16.4 사이클 실패 매핑
+
+frontmatter/Pebble 단계의 실패는 모두 `INPUT_ASSEMBLY_FAILED` 사유로 사이클을 `FAILED` 종료한다.
+
+- YAML frontmatter 파싱 실패
+- 허용되지 않은 source 타입/누락 필수 필드
+- `PromptContextAssembler` 의 필수 source 조회 실패
+- `PromptTemplateEngine` 렌더 실패 (Pebble syntax 오류, 정의되지 않은 변수, 잘못된 loop 등)
+
+판단 로그도 `FAILED`로 기록한다. 부분 수용은 없다.
+
+## 17. 구현 체크리스트
 
 구현 완료 기준:
 
@@ -398,6 +478,7 @@ reconcile은 브로커의 실제 주문 상태와 내부 주문 상태를 맞추
 - `paper` 전체 사이클 완성
 - `live` reconcile 선행 정책 반영
 - 판단 시점 설정값 고정 저장
+- prompt frontmatter + Pebble template 기반 입력 조립 (`PromptInputSpecParser` → `PromptContextAssembler` → `PromptTemplateEngine`)
 - `trade_decision_log` / `trade_order_intent` / `trade_order` 연결
 - `portfolio_after_json` 저장
 - 비용 상한 초과 알림과 `reconcile_failed` 기반 `auto_paused` 반영
