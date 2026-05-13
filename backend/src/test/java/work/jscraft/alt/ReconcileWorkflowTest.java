@@ -15,6 +15,7 @@ import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEnti
 import work.jscraft.alt.trading.application.broker.OrderStatusResult;
 import work.jscraft.alt.trading.application.broker.PlaceOrderResult;
 import work.jscraft.alt.trading.application.cycle.TradeCycleLifecycle;
+import work.jscraft.alt.trading.application.order.LiveOrderExecutor;
 import work.jscraft.alt.trading.application.reconcile.ReconcileService;
 import work.jscraft.alt.trading.application.reconcile.ReconcileService.ReconcileResult;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeCycleLogRepository;
@@ -115,6 +116,20 @@ class ReconcileWorkflowTest extends TradingCycleIntegrationTestSupport {
         assertThat(reloaded.getOrderStatus()).isEqualTo(PlaceOrderResult.STATUS_REJECTED);
         assertThat(reloaded.getFailureReason()).isEqualTo("거래 정지");
         assertThat(reloaded.getFailedAt()).isNotNull();
+    }
+
+    @Test
+    void unknownSubmissionWithoutBrokerOrderNoFailsReconcileForManualReview() {
+        StrategyInstanceEntity instance = createActiveLiveInstance("KR LIVE D");
+        seedCash(instance, new BigDecimal("1000000.0000"));
+        seedPendingOrder(instance, "005930", "BUY",
+                new BigDecimal("5"), new BigDecimal("81000"), null,
+                LiveOrderExecutor.ORDER_STATUS_SUBMISSION_UNKNOWN, BigDecimal.ZERO);
+
+        ReconcileResult result = reconcileService.reconcile(instance);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.failureMessage()).contains("broker_order_no가 없는 제출 미확정 주문");
     }
 
     private void seedCash(StrategyInstanceEntity instance, BigDecimal cash) {

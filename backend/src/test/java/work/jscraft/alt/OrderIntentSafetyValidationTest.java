@@ -3,6 +3,8 @@ package work.jscraft.alt;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -10,6 +12,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketPriceItemEntity;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketPriceItemRepository;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioEntity;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioPositionEntity;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioPositionRepository;
@@ -52,6 +56,9 @@ class OrderIntentSafetyValidationTest extends TradingCycleIntegrationTestSupport
 
     @Autowired
     private PortfolioPositionRepository portfolioPositionRepository;
+
+    @Autowired
+    private MarketPriceItemRepository marketPriceItemRepository;
 
     @BeforeEach
     void setUp() {
@@ -102,7 +109,7 @@ class OrderIntentSafetyValidationTest extends TradingCycleIntegrationTestSupport
         List<TradeOrderIntentEntity> intents = generator.generate(decisionLog, parsed);
         assertThat(intents).hasSize(6);
 
-        validator.validate(instance.getId(), intents);
+        validator.validate(instance.getId(), instance.getExecutionMode(), intents);
 
         assertThat(intents.get(0).getExecutionBlockedReason())
                 .isEqualTo(OrderIntentSafetyValidator.REASON_QUANTITY_NON_POSITIVE);
@@ -115,6 +122,64 @@ class OrderIntentSafetyValidationTest extends TradingCycleIntegrationTestSupport
         assertThat(intents.get(4).getExecutionBlockedReason())
                 .isEqualTo(OrderIntentSafetyValidator.REASON_INSUFFICIENT_POSITION);
         assertThat(intents.get(5).getExecutionBlockedReason()).isNull();
+    }
+
+    @Test
+    void paperMarketBuyUsesLatestPriceForCashValidation() {
+        StrategyInstanceEntity instance = createActiveInstance("KR 모멘텀 MARKET", "paper");
+        seedPortfolio(instance, new BigDecimal("100000.0000"));
+        seedPriceSnapshot("005930", new BigDecimal("80000.00000000"));
+        UUID cycleId = lifecycle.startCycle(instance);
+        SettingsSnapshot snapshot = snapshotProvider.capture(instance.getId());
+
+        ParsedDecision parsed = new ParsedDecision(
+                "EXECUTE",
+                "마켓 검증",
+                new BigDecimal("0.5"),
+                null,
+                List.of(new ParsedOrder(1, "005930", "BUY", new BigDecimal("2"),
+                        "MARKET", null, "market no cash", objectMapper.createArrayNode())));
+
+        LlmRequest request = new LlmRequest(UUID.randomUUID(), "openclaw", "gpt-5.5",
+                "prompt", Duration.ofSeconds(30));
+        LlmCallResult result = LlmCallResult.success(0, "{...}", "");
+
+        TradeDecisionLogEntity decisionLog = tradeDecisionLogService.saveSuccess(
+                cycleId, parsed, snapshot, objectMapper.createObjectNode(), request, result, null);
+        List<TradeOrderIntentEntity> intents = generator.generate(decisionLog, parsed);
+
+        validator.validate(instance.getId(), instance.getExecutionMode(), intents);
+
+        assertThat(intents.get(0).getExecutionBlockedReason())
+                .isEqualTo(OrderIntentSafetyValidator.REASON_INSUFFICIENT_CASH);
+    }
+
+    @Test
+    void liveMarketBuyIsLeftToBrokerInsteadOfLocalCashValidation() {
+        StrategyInstanceEntity instance = createActiveLiveInstance("KR 라이브 MARKET");
+        seedPortfolio(instance, new BigDecimal("100000.0000"));
+        UUID cycleId = lifecycle.startCycle(instance);
+        SettingsSnapshot snapshot = snapshotProvider.capture(instance.getId());
+
+        ParsedDecision parsed = new ParsedDecision(
+                "EXECUTE",
+                "라이브 마켓 검증",
+                new BigDecimal("0.5"),
+                null,
+                List.of(new ParsedOrder(1, "005930", "BUY", new BigDecimal("2"),
+                        "MARKET", null, "live market", objectMapper.createArrayNode())));
+
+        LlmRequest request = new LlmRequest(UUID.randomUUID(), "openclaw", "gpt-5.5",
+                "prompt", Duration.ofSeconds(30));
+        LlmCallResult result = LlmCallResult.success(0, "{...}", "");
+
+        TradeDecisionLogEntity decisionLog = tradeDecisionLogService.saveSuccess(
+                cycleId, parsed, snapshot, objectMapper.createObjectNode(), request, result, null);
+        List<TradeOrderIntentEntity> intents = generator.generate(decisionLog, parsed);
+
+        validator.validate(instance.getId(), instance.getExecutionMode(), intents);
+
+        assertThat(intents.get(0).getExecutionBlockedReason()).isNull();
     }
 
     private void seedPortfolio(StrategyInstanceEntity instance, BigDecimal cash) {
@@ -133,5 +198,16 @@ class OrderIntentSafetyValidationTest extends TradingCycleIntegrationTestSupport
         p.setQuantity(qty);
         p.setAvgBuyPrice(new BigDecimal("80000.00000000"));
         portfolioPositionRepository.saveAndFlush(p);
+    }
+
+    private void seedPriceSnapshot(String symbolCode, BigDecimal lastPrice) {
+        MarketPriceItemEntity snapshot = new MarketPriceItemEntity();
+        snapshot.setSymbolCode(symbolCode);
+        OffsetDateTime now = OffsetDateTime.of(2026, 5, 11, 0, 59, 0, 0, ZoneOffset.UTC);
+        snapshot.setSnapshotAt(now);
+        snapshot.setBusinessDate(now.toLocalDate());
+        snapshot.setLastPrice(lastPrice);
+        snapshot.setSourceName("kis");
+        marketPriceItemRepository.saveAndFlush(snapshot);
     }
 }

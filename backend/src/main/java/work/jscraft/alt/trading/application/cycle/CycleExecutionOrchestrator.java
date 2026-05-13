@@ -214,7 +214,7 @@ public class CycleExecutionOrchestrator {
 
         lifecycle.advance(cycleLogId, TradeCycleLifecycle.STAGE_ORDER_PLANNING);
         List<TradeOrderIntentEntity> intents = intentGenerator.generate(decisionLog, parsed);
-        safetyValidator.validate(instance.getId(), intents);
+        safetyValidator.validate(instance.getId(), instance.getExecutionMode(), intents);
 
         lifecycle.advance(cycleLogId, TradeCycleLifecycle.STAGE_ORDER_EXECUTING);
         List<TradeOrderEntity> orders = liveMode

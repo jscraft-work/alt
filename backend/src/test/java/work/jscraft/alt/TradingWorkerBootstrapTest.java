@@ -9,7 +9,6 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 import work.jscraft.alt.trading.application.cycle.CycleExecutionOrchestrator;
@@ -28,15 +27,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @Import({ PostgreSqlTestConfiguration.class, RedisTestConfiguration.class, AuthTestClockConfiguration.class })
 @AutoConfigureTestDatabase(replace = Replace.NONE)
-@ActiveProfiles("trading-worker")
+@AltTradingWorkerTestProfile
 @TestPropertySource(properties = {
         "spring.flyway.enabled=true",
         "spring.jpa.hibernate.ddl-auto=validate",
-        "app.auth.jwt-secret=test-jwt-secret-test-jwt-secret-test-jwt-secret",
         "app.trading.reconcile.initial-delay-ms=3600000",
         "app.trading.reconcile.interval-ms=3600000",
-        "db-scheduler.polling-interval=1h",
-        "app.seed.enabled=false"
+        "db-scheduler.polling-interval=1h"
 })
 class TradingWorkerBootstrapTest {
 

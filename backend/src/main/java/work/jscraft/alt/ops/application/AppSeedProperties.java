@@ -26,8 +26,8 @@ public class AppSeedProperties {
     }
 
     public static class Admin {
-        private String loginId = "admin";
-        private String password = "ChangeMe!2026";
+        private String loginId;
+        private String password;
         private String displayName = "관리자";
 
         public String getLoginId() {

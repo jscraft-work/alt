@@ -9,6 +9,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import work.jscraft.alt.auth.infrastructure.persistence.AppUserEntity;
 import work.jscraft.alt.auth.infrastructure.persistence.AppUserRepository;
@@ -48,9 +49,17 @@ public class SeedDataRunner implements CommandLineRunner {
         if (!properties.isEnabled()) {
             return new SeedResult(false, false);
         }
+        requireAdminSeedConfig();
         boolean adminCreated = ensureAdminUser();
         boolean modelProfileCreated = ensureDefaultModelProfile();
         return new SeedResult(adminCreated, modelProfileCreated);
+    }
+
+    private void requireAdminSeedConfig() {
+        AppSeedProperties.Admin admin = properties.getAdmin();
+        if (!StringUtils.hasText(admin.getLoginId()) || !StringUtils.hasText(admin.getPassword())) {
+            throw new IllegalStateException("seed enabled but admin loginId/password is not configured");
+        }
     }
 
     private boolean ensureAdminUser() {

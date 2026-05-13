@@ -15,7 +15,7 @@ public class AuthProperties {
 
     @NotBlank
     @Size(min = 32)
-    private String jwtSecret = "change-this-jwt-secret-change-this-jwt-secret";
+    private String jwtSecret;
 
     @NotNull
     private Duration idleTimeout = Duration.ofHours(8);

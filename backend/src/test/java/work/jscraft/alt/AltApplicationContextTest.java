@@ -8,6 +8,7 @@ import org.springframework.context.ApplicationContext;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@AltTestProfile
 class AltApplicationContextTest {
 
     @Autowired

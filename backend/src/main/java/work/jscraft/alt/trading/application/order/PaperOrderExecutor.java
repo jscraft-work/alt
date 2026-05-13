@@ -17,6 +17,7 @@ import work.jscraft.alt.marketdata.infrastructure.persistence.MarketPriceItemRep
 import work.jscraft.alt.portfolio.application.PortfolioUpdateService;
 import work.jscraft.alt.portfolio.application.PortfolioUpdateService.PortfolioSnapshot;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEntity;
+import work.jscraft.alt.trading.domain.TradeOrderStatus;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderRepository;
@@ -25,7 +26,7 @@ import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderRepository;
 public class PaperOrderExecutor {
 
     public static final String EXECUTION_MODE_PAPER = "paper";
-    public static final String ORDER_STATUS_FILLED = "filled";
+    public static final String ORDER_STATUS_FILLED = TradeOrderStatus.FILLED.wireValue();
     public static final String SIDE_BUY = "BUY";
     public static final String SIDE_SELL = "SELL";
     public static final String ORDER_TYPE_MARKET = "MARKET";

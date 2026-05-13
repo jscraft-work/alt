@@ -1,0 +1,5 @@
+app:
+  auth:
+    jwt-secret: test-jwt-secret-test-jwt-secret-test-jwt-secret
+  seed:
+    enabled: false

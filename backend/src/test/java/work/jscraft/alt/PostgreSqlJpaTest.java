@@ -14,6 +14,7 @@ import org.springframework.test.context.TestPropertySource;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @DataJpaTest
+@AltTestProfile
 @Import(PostgreSqlTestConfiguration.class)
 @AutoConfigureTestDatabase(replace = Replace.NONE)
 @TestPropertySource(properties = {

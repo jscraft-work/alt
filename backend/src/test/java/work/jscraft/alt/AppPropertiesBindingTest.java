@@ -9,6 +9,7 @@ import work.jscraft.alt.common.config.AppProperties;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@AltTestProfile
 class AppPropertiesBindingTest {
 
     @Autowired

@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioEntity;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioRepository;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEntity;
+import work.jscraft.alt.trading.application.broker.BrokerGatewayException;
 import work.jscraft.alt.trading.application.broker.PlaceOrderResult;
 import work.jscraft.alt.trading.application.cycle.TradeCycleLifecycle;
 import work.jscraft.alt.trading.application.order.LiveOrderExecutor;
@@ -137,6 +138,29 @@ class LiveOrderExecutionTest extends TradingCycleIntegrationTestSupport {
         PortfolioEntity portfolio = portfolioRepository.findByStrategyInstanceId(instance.getId()).orElseThrow();
         assertThat(portfolio.getCashAmount()).isEqualByComparingTo("9595000.0000");
         assertThat(order.getPortfolioAfterJson()).isNotNull();
+    }
+
+    @Test
+    void timeoutLeavesSubmissionUnknownRecordForManualReconcile() {
+        StrategyInstanceEntity instance = createActiveLiveInstance("KR LIVE D");
+        seedCash(instance, new BigDecimal("10000000.0000"));
+        TradeDecisionLogEntity decisionLog = seedDecisionLog(instance);
+        TradeOrderIntentEntity intent = seedIntent(decisionLog, "005930", "BUY", "LIMIT",
+                new BigDecimal("5"), new BigDecimal("81000"));
+
+        fakeBrokerGateway.primePlaceFailure(new BrokerGatewayException(
+                BrokerGatewayException.Category.TIMEOUT, "fake", "broker timeout"));
+
+        List<TradeOrderEntity> orders = liveOrderExecutor.execute(instance, List.of(intent));
+
+        assertThat(orders).hasSize(1);
+        TradeOrderEntity order = orders.get(0);
+        assertThat(order.getOrderStatus()).isEqualTo(LiveOrderExecutor.ORDER_STATUS_SUBMISSION_UNKNOWN);
+        assertThat(order.getBrokerOrderNo()).isNull();
+        assertThat(order.getFailureReason()).contains("TIMEOUT");
+
+        PortfolioEntity portfolio = portfolioRepository.findByStrategyInstanceId(instance.getId()).orElseThrow();
+        assertThat(portfolio.getCashAmount()).isEqualByComparingTo("10000000.0000");
     }
 
     private void seedCash(StrategyInstanceEntity instance, BigDecimal cash) {

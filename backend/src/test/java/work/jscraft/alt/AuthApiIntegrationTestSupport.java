@@ -32,14 +32,13 @@ import work.jscraft.alt.auth.security.RedisLoginBlockService;
 import work.jscraft.alt.ops.infrastructure.persistence.AuditLogRepository;
 
 @SpringBootTest
+@AltTestProfile
 @AutoConfigureMockMvc
 @Import({ PostgreSqlTestConfiguration.class, RedisTestConfiguration.class, AuthTestClockConfiguration.class })
 @AutoConfigureTestDatabase(replace = Replace.NONE)
 @TestPropertySource(properties = {
         "spring.flyway.enabled=true",
-        "spring.jpa.hibernate.ddl-auto=validate",
-        "app.auth.jwt-secret=test-jwt-secret-test-jwt-secret-test-jwt-secret",
-        "app.seed.enabled=false"
+        "spring.jpa.hibernate.ddl-auto=validate"
 })
 abstract class AuthApiIntegrationTestSupport {
 

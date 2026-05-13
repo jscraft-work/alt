@@ -2,6 +2,8 @@ package work.jscraft.alt.trading.application.broker;
 
 import java.math.BigDecimal;
 
+import work.jscraft.alt.trading.domain.TradeOrderStatus;
+
 public record OrderStatusResult(
         String brokerOrderNo,
         String orderStatus,
@@ -10,9 +12,6 @@ public record OrderStatusResult(
         String failureReason) {
 
     public boolean isTerminal() {
-        return PlaceOrderResult.STATUS_FILLED.equals(orderStatus)
-                || PlaceOrderResult.STATUS_REJECTED.equals(orderStatus)
-                || PlaceOrderResult.STATUS_FAILED.equals(orderStatus)
-                || "canceled".equals(orderStatus);
+        return TradeOrderStatus.fromWire(orderStatus).isTerminal();
     }
 }

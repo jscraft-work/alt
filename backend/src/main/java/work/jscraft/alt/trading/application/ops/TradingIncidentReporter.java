@@ -99,6 +99,29 @@ public class TradingIncidentReporter {
                 instanceLine(instance) + " | " + message, tags);
     }
 
+    public void reportLiveOrderSubmissionUnknown(
+            StrategyInstanceEntity instance,
+            TradeOrderIntentEntity intent,
+            String clientOrderId,
+            String failureReason) {
+        Map<String, String> tags = baseTags(instance, null);
+        tags.put("actionRequired", "manual_broker_review");
+        if (intent != null) {
+            tags.put("intentId", intent.getId() != null ? intent.getId().toString() : "");
+            tags.put("symbol", nullSafe(intent.getSymbolCode()));
+            tags.put("side", nullSafe(intent.getSide()));
+        }
+        if (clientOrderId != null) {
+            tags.put("clientOrderId", clientOrderId);
+        }
+        String message = "live order submission unknown: " + nullSafe(failureReason)
+                + " | 운영자 확인 필요 (중복 주문 위험 있음)";
+        opsEventRecorder.recordFailure(
+                instance, TradingOpsEventRecorder.EVENT_LIVE_ORDER_FAILED, message, tags);
+        dispatch(Severity.WARNING, "주문 제출 불확실",
+                instanceLine(instance) + " | " + message, tags);
+    }
+
     private void dispatch(Severity severity, String title, String message, Map<String, String> tags) {
         try {
             alertGateway.dispatch(new AlertEvent(

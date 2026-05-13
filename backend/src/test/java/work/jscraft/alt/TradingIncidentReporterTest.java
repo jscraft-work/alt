@@ -23,6 +23,7 @@ import work.jscraft.alt.trading.application.decision.DecisionParseException;
 import work.jscraft.alt.trading.application.decision.LlmCallResult;
 import work.jscraft.alt.trading.application.ops.TradingIncidentReporter;
 import work.jscraft.alt.trading.application.ops.TradingOpsEventRecorder;
+import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -116,16 +117,39 @@ class TradingIncidentReporterTest {
                 .isEqualTo("INVALID_JSON");
     }
 
+    @Test
+    void submissionUnknownAlertIncludesManualReviewGuidance() throws Exception {
+        StrategyInstanceEntity instance = instance("unknown-submit");
+        TradeOrderIntentEntity intent = new TradeOrderIntentEntity();
+        intent.setSymbolCode("005930");
+        intent.setSide("BUY");
+        setId(intent, UUID.randomUUID());
+
+        reporter.reportLiveOrderSubmissionUnknown(instance, intent, "live-123", "TIMEOUT: broker timeout");
+
+        ArgumentCaptor<AlertEvent> alertCaptor = ArgumentCaptor.forClass(AlertEvent.class);
+        verify(alertGateway).dispatch(alertCaptor.capture());
+        AlertEvent alert = alertCaptor.getValue();
+        assertThat(alert.title()).isEqualTo("주문 제출 불확실");
+        assertThat(alert.message()).contains("운영자 확인 필요").contains("중복 주문 위험");
+        assertThat(alert.tags().get("actionRequired")).isEqualTo("manual_broker_review");
+    }
+
     private StrategyInstanceEntity instance(String name) throws Exception {
         StrategyInstanceEntity entity = new StrategyInstanceEntity();
         entity.setName(name);
+        setId(entity, UUID.randomUUID());
+        return entity;
+    }
+
+    private void setId(Object entity, UUID id) throws Exception {
         Class<?> klass = entity.getClass();
         while (klass != null) {
             try {
                 Field f = klass.getDeclaredField("id");
                 f.setAccessible(true);
-                f.set(entity, UUID.randomUUID());
-                return entity;
+                f.set(entity, id);
+                return;
             } catch (NoSuchFieldException ignored) {
                 klass = klass.getSuperclass();
             }

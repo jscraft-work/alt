@@ -38,13 +38,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
+@AltTestProfile
 @Import({ PostgreSqlTestConfiguration.class, RedisTestConfiguration.class })
 @AutoConfigureTestDatabase(replace = Replace.NONE)
 @TestPropertySource(properties = {
         "spring.flyway.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=none",
-        "app.auth.jwt-secret=test-jwt-secret-test-jwt-secret-test-jwt-secret",
-        "app.seed.enabled=false"
+        "spring.jpa.hibernate.ddl-auto=none"
 })
 class KisApprovalKeyServiceTest {
 

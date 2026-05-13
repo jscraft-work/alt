@@ -17,7 +17,7 @@ import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceRepo
 import work.jscraft.alt.trading.application.broker.BrokerGateway;
 import work.jscraft.alt.trading.application.broker.BrokerGatewayException;
 import work.jscraft.alt.trading.application.broker.OrderStatusResult;
-import work.jscraft.alt.trading.application.broker.PlaceOrderResult;
+import work.jscraft.alt.trading.domain.TradeOrderStatus;
 import work.jscraft.alt.trading.application.ops.TradingIncidentReporter;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderRepository;
@@ -27,8 +27,7 @@ public class ReconcileService {
 
     public static final String AUTO_PAUSED_REASON = "reconcile_failed";
     public static final String EXECUTION_MODE_LIVE = "live";
-    private static final List<String> PENDING_STATUSES = List.of(
-            PlaceOrderResult.STATUS_ACCEPTED, PlaceOrderResult.STATUS_PARTIAL, "requested");
+    private static final List<String> PENDING_STATUSES = TradeOrderStatus.pendingWireValues();
 
     private static final Logger log = LoggerFactory.getLogger(ReconcileService.class);
 
@@ -65,7 +64,9 @@ public class ReconcileService {
         int updated = 0;
         for (TradeOrderEntity order : pending) {
             if (order.getBrokerOrderNo() == null || order.getBrokerOrderNo().isBlank()) {
-                return ReconcileResult.failure("broker_order_no가 없는 미확정 주문: " + order.getId());
+                return ReconcileResult.failure("broker_order_no가 없는 제출 미확정 주문: orderId="
+                        + order.getId() + ", clientOrderId=" + order.getClientOrderId()
+                        + ", status=" + order.getOrderStatus());
             }
             OrderStatusResult statusResult;
             try {
@@ -105,11 +106,11 @@ public class ReconcileService {
         order.setFilledQuantity(newFilled);
         order.setAvgFilledPrice(statusResult.avgFilledPrice());
         OffsetDateTime now = OffsetDateTime.now(clock);
-        if (PlaceOrderResult.STATUS_FILLED.equals(statusResult.orderStatus())) {
+        TradeOrderStatus status = TradeOrderStatus.fromWire(statusResult.orderStatus());
+        if (TradeOrderStatus.FILLED == status) {
             order.setFilledAt(now);
         }
-        if (PlaceOrderResult.STATUS_REJECTED.equals(statusResult.orderStatus())
-                || PlaceOrderResult.STATUS_FAILED.equals(statusResult.orderStatus())) {
+        if (status.isTerminalFailure()) {
             order.setFailedAt(now);
             order.setFailureReason(statusResult.failureReason());
         }

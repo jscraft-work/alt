@@ -7,7 +7,6 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 import work.jscraft.alt.collector.application.disclosure.DartDisclosureCollector;
@@ -29,19 +28,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import({ PostgreSqlTestConfiguration.class, RedisTestConfiguration.class, AuthTestClockConfiguration.class,
         CollectorTestConfiguration.class })
 @AutoConfigureTestDatabase(replace = Replace.NONE)
-@ActiveProfiles("collector-worker")
+@AltCollectorWorkerTestProfile
 @TestPropertySource(properties = {
         "spring.flyway.enabled=true",
         "spring.jpa.hibernate.ddl-auto=validate",
-        "app.auth.jwt-secret=test-jwt-secret-test-jwt-secret-test-jwt-secret",
         "app.collector.marketdata.initial-delay-ms=3600000",
         "app.collector.marketdata.price-interval-ms=3600000",
         "app.collector.marketdata.minute-bar-interval-ms=3600000",
         "app.collector.content.initial-delay-ms=3600000",
         "app.collector.content.news-interval-ms=3600000",
         "app.collector.content.disclosure-interval-ms=3600000",
-        "app.collector.content.macro-interval-ms=3600000",
-        "app.seed.enabled=false"
+        "app.collector.content.macro-interval-ms=3600000"
 })
 class CollectorWorkerBootstrapTest {
 
