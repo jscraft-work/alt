@@ -633,7 +633,7 @@ function TradeOrderDetailDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-4xl overflow-hidden p-0">
+      <DialogContent className="flex max-h-[88vh] max-w-4xl flex-col overflow-hidden p-0">
         <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>주문 상세</DialogTitle>
           <DialogDescription>
@@ -641,7 +641,7 @@ function TradeOrderDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {query.isPending && <LoadingInline label="주문 상세를 불러오는 중..." />}
           {query.error && (
             <InlineError message={query.error.message} onRetry={() => void query.refetch()} />
@@ -664,7 +664,7 @@ function TradeDecisionDetailDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden p-0">
+      <DialogContent className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden p-0">
         <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>판단 로그 상세</DialogTitle>
           <DialogDescription>
@@ -672,7 +672,7 @@ function TradeDecisionDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {query.isPending && <LoadingInline label="판단 로그 상세를 불러오는 중..." />}
           {query.error && (
             <InlineError message={query.error.message} onRetry={() => void query.refetch()} />
