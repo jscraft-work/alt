@@ -813,6 +813,10 @@
 }
 ```
 
+비고:
+- 생략한 필드는 기존 값을 유지한다.
+- `brokerAccountId`, `tradingModelProfileId`, `inputSpecOverride`, `executionConfigOverride`에 `null`을 보내면 override 를 해제하고 템플릿 기본값을 사용한다.
+
 ### 8.7 전략 인스턴스 상태 전환
 
 `POST /api/admin/strategy-instances/{strategyInstanceId}/lifecycle`

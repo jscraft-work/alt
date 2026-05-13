@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import jakarta.validation.constraints.DecimalMin;
@@ -102,8 +103,7 @@ public class StrategyInstanceService {
     public StrategyInstanceView createStrategyInstance(CreateStrategyInstanceRequest request, AdminSessionPrincipal actor) {
         StrategyTemplateEntity template = findStrategyTemplate(request.strategyTemplateId());
         BrokerAccountEntity brokerAccount = findBrokerAccount(request.brokerAccountId());
-        LlmModelProfileEntity tradingModelProfile =
-                resolveTradingModelProfile(request.tradingModelProfileId(), template.getDefaultTradingModelProfile().getId());
+        LlmModelProfileEntity tradingModelProfile = findTradingModelProfileOverride(request.tradingModelProfileId());
 
         StrategyInstanceEntity entity = new StrategyInstanceEntity();
         entity.setStrategyTemplate(template);
@@ -113,9 +113,8 @@ public class StrategyInstanceService {
         entity.setBrokerAccount(brokerAccount);
         entity.setBudgetAmount(request.budgetAmount());
         entity.setTradingModelProfile(tradingModelProfile);
-        entity.setInputSpecOverrideJson(resolveJsonValue(request.inputSpecOverride(), template.getDefaultInputSpecJson()));
-        entity.setExecutionConfigOverrideJson(
-                resolveJsonValue(request.executionConfigOverride(), template.getDefaultExecutionConfigJson()));
+        entity.setInputSpecOverrideJson(copyJsonValue(request.inputSpecOverride()));
+        entity.setExecutionConfigOverrideJson(copyJsonValue(request.executionConfigOverride()));
 
         strategyInstanceRepository.saveAndFlush(entity);
 
@@ -150,32 +149,50 @@ public class StrategyInstanceService {
         StrategyInstanceEntity entity = findStrategyInstance(strategyInstanceId);
         assertVersion(request.version(), entity.getVersion());
 
-        BrokerAccountEntity requestedBrokerAccount = findBrokerAccount(request.brokerAccountId());
+        String requestedName = request.hasName()
+                ? validateName(request.name())
+                : entity.getName();
+        String requestedExecutionMode = request.hasExecutionMode()
+                ? validateExecutionMode(request.executionMode())
+                : entity.getExecutionMode();
+        BrokerAccountEntity requestedBrokerAccount = request.hasBrokerAccountId()
+                ? findBrokerAccount(request.brokerAccountId())
+                : entity.getBrokerAccount();
+        BigDecimal requestedBudgetAmount = request.hasBudgetAmount()
+                ? validateBudgetAmount(request.budgetAmount())
+                : entity.getBudgetAmount();
+        LlmModelProfileEntity requestedTradingModelProfile = request.hasTradingModelProfileId()
+                ? findTradingModelProfileOverride(request.tradingModelProfileId())
+                : entity.getTradingModelProfile();
+        JsonNode requestedInputSpec = request.hasInputSpecOverride()
+                ? copyJsonValue(request.inputSpecOverride())
+                : copyJsonValue(entity.getInputSpecOverrideJson());
+        JsonNode requestedExecutionConfig = request.hasExecutionConfigOverride()
+                ? copyJsonValue(request.executionConfigOverride())
+                : copyJsonValue(entity.getExecutionConfigOverrideJson());
+
         if (LIFECYCLE_ACTIVE.equals(entity.getLifecycleState())) {
-            rejectIfChanged("active 상태에서는 이름을 변경할 수 없습니다.", entity.getName(), request.name());
-            rejectIfChanged("active 상태에서는 실행 모드를 변경할 수 없습니다.", entity.getExecutionMode(), request.executionMode());
+            rejectIfChanged("active 상태에서는 이름을 변경할 수 없습니다.", entity.getName(), requestedName);
+            rejectIfChanged("active 상태에서는 실행 모드를 변경할 수 없습니다.", entity.getExecutionMode(), requestedExecutionMode);
             rejectIfChanged(
                     "active 상태에서는 연결 계좌를 변경할 수 없습니다.",
                     brokerAccountId(entity.getBrokerAccount()),
                     brokerAccountId(requestedBrokerAccount));
-            rejectIfChanged("active 상태에서는 전략 예산을 변경할 수 없습니다.", entity.getBudgetAmount(), request.budgetAmount());
+            rejectIfChanged("active 상태에서는 전략 예산을 변경할 수 없습니다.", entity.getBudgetAmount(), requestedBudgetAmount);
         }
         if (LIFECYCLE_INACTIVE.equals(entity.getLifecycleState())) {
-            rejectIfChanged("inactive 상태에서는 전략 예산을 변경할 수 없습니다.", entity.getBudgetAmount(), request.budgetAmount());
+            rejectIfChanged("inactive 상태에서는 전략 예산을 변경할 수 없습니다.", entity.getBudgetAmount(), requestedBudgetAmount);
         }
 
         StrategyInstanceView before = toView(entity);
 
-        entity.setName(request.name());
-        entity.setExecutionMode(request.executionMode());
+        entity.setName(requestedName);
+        entity.setExecutionMode(requestedExecutionMode);
         entity.setBrokerAccount(requestedBrokerAccount);
-        entity.setBudgetAmount(request.budgetAmount());
-        entity.setTradingModelProfile(
-                resolveTradingModelProfile(request.tradingModelProfileId(), entity.getStrategyTemplate().getDefaultTradingModelProfile().getId()));
-        entity.setInputSpecOverrideJson(
-                resolveJsonValue(request.inputSpecOverride(), entity.getStrategyTemplate().getDefaultInputSpecJson()));
-        entity.setExecutionConfigOverrideJson(
-                resolveJsonValue(request.executionConfigOverride(), entity.getStrategyTemplate().getDefaultExecutionConfigJson()));
+        entity.setBudgetAmount(requestedBudgetAmount);
+        entity.setTradingModelProfile(requestedTradingModelProfile);
+        entity.setInputSpecOverrideJson(requestedInputSpec);
+        entity.setExecutionConfigOverrideJson(requestedExecutionConfig);
 
         StrategyInstanceView updated = toView(strategyInstanceRepository.saveAndFlush(entity));
         auditLogService.recordUpdate(
@@ -377,12 +394,12 @@ public class StrategyInstanceService {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "현재 프롬프트가 없어 활성화할 수 없습니다.");
         }
 
-        LlmModelProfileEntity modelProfile = entity.getTradingModelProfile();
+        LlmModelProfileEntity modelProfile = effectiveTradingModelProfile(entity);
         if (modelProfile == null || !PURPOSE_TRADING_DECISION.equals(modelProfile.getPurpose())) {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "트레이딩 모델이 없어 활성화할 수 없습니다.");
         }
 
-        if (entity.getInputSpecOverrideJson() == null) {
+        if (effectiveInputSpec(entity) == null) {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "입력 스펙이 없어 활성화할 수 없습니다.");
         }
 
@@ -413,14 +430,14 @@ public class StrategyInstanceService {
         }
     }
 
-    private JsonNode resolveJsonValue(JsonNode requestedValue, JsonNode defaultValue) {
+    private JsonNode copyJsonValue(JsonNode requestedValue) {
         return requestedValue == null || requestedValue.isNull()
-                ? defaultValue.deepCopy()
+                ? null
                 : requestedValue.deepCopy();
     }
 
     private String resolveInputScope(StrategyInstanceEntity entity) {
-        JsonNode inputSpec = entity.getInputSpecOverrideJson();
+        JsonNode inputSpec = effectiveInputSpec(entity);
         if (inputSpec == null || inputSpec.isNull()) {
             return null;
         }
@@ -428,14 +445,74 @@ public class StrategyInstanceService {
         return scope == null || scope.isBlank() ? null : scope;
     }
 
-    private LlmModelProfileEntity resolveTradingModelProfile(UUID requestedModelProfileId, UUID defaultModelProfileId) {
-        UUID targetId = requestedModelProfileId == null ? defaultModelProfileId : requestedModelProfileId;
-        LlmModelProfileEntity modelProfile = llmModelProfileRepository.findById(targetId)
+    private LlmModelProfileEntity findTradingModelProfileOverride(UUID requestedModelProfileId) {
+        if (requestedModelProfileId == null) {
+            return null;
+        }
+        LlmModelProfileEntity modelProfile = llmModelProfileRepository.findById(requestedModelProfileId)
                 .orElseThrow(() -> notFound("트레이딩 모델 프로필을 찾을 수 없습니다."));
         if (!PURPOSE_TRADING_DECISION.equals(modelProfile.getPurpose())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "트레이딩 모델은 trading_decision 용도여야 합니다.");
         }
         return modelProfile;
+    }
+
+    private LlmModelProfileEntity effectiveTradingModelProfile(StrategyInstanceEntity entity) {
+        if (entity.getTradingModelProfile() != null) {
+            return entity.getTradingModelProfile();
+        }
+        StrategyTemplateEntity template = entity.getStrategyTemplate();
+        return template == null ? null : template.getDefaultTradingModelProfile();
+    }
+
+    private JsonNode effectiveInputSpec(StrategyInstanceEntity entity) {
+        JsonNode override = entity.getInputSpecOverrideJson();
+        if (override != null && !override.isNull()) {
+            return override.deepCopy();
+        }
+        StrategyTemplateEntity template = entity.getStrategyTemplate();
+        JsonNode defaultValue = template == null ? null : template.getDefaultInputSpecJson();
+        return defaultValue == null ? null : defaultValue.deepCopy();
+    }
+
+    private JsonNode effectiveExecutionConfig(StrategyInstanceEntity entity) {
+        JsonNode override = entity.getExecutionConfigOverrideJson();
+        if (override != null && !override.isNull()) {
+            return override.deepCopy();
+        }
+        StrategyTemplateEntity template = entity.getStrategyTemplate();
+        JsonNode defaultValue = template == null ? null : template.getDefaultExecutionConfigJson();
+        return defaultValue == null ? null : defaultValue.deepCopy();
+    }
+
+    private String validateName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name은 필수입니다.");
+        }
+        if (name.length() > 120) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name은 120자 이하여야 합니다.");
+        }
+        return name;
+    }
+
+    private String validateExecutionMode(String executionMode) {
+        if (executionMode == null || executionMode.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "executionMode는 필수입니다.");
+        }
+        if (!executionMode.matches(EXECUTION_MODE_PATTERN)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "executionMode가 올바르지 않습니다.");
+        }
+        return executionMode;
+    }
+
+    private BigDecimal validateBudgetAmount(BigDecimal budgetAmount) {
+        if (budgetAmount == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "budgetAmount는 필수입니다.");
+        }
+        if (budgetAmount.signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "budgetAmount는 0보다 커야 합니다.");
+        }
+        return budgetAmount;
     }
 
     private StrategyTemplateEntity findStrategyTemplate(UUID strategyTemplateId) {
@@ -517,8 +594,8 @@ public class StrategyInstanceService {
                 entity.getBudgetAmount(),
                 entity.getCurrentPromptVersion() == null ? null : entity.getCurrentPromptVersion().getId().toString(),
                 entity.getTradingModelProfile() == null ? null : entity.getTradingModelProfile().getId().toString(),
-                entity.getInputSpecOverrideJson(),
-                entity.getExecutionConfigOverrideJson(),
+                copyJsonValue(entity.getInputSpecOverrideJson()),
+                copyJsonValue(entity.getExecutionConfigOverrideJson()),
                 entity.getAutoPausedReason(),
                 entity.getAutoPausedAt() == null ? null : entity.getAutoPausedAt().toString(),
                 entity.getVersion(),
@@ -615,19 +692,129 @@ public class StrategyInstanceService {
             JsonNode executionConfigOverride) {
     }
 
-    public record UpdateStrategyInstanceRequest(
-            @NotBlank(message = "name은 필수입니다.") @Size(max = 120, message = "name은 120자 이하여야 합니다.") String name,
-            @NotBlank(message = "executionMode는 필수입니다.") @Pattern(
-                    regexp = EXECUTION_MODE_PATTERN,
-                    message = "executionMode가 올바르지 않습니다.") String executionMode,
-            UUID brokerAccountId,
-            @NotNull(message = "budgetAmount는 필수입니다.") @DecimalMin(
-                    value = "0.0001",
-                    message = "budgetAmount는 0보다 커야 합니다.") BigDecimal budgetAmount,
-            UUID tradingModelProfileId,
-            JsonNode inputSpecOverride,
-            JsonNode executionConfigOverride,
-            @NotNull(message = "version은 필수입니다.") Long version) {
+    public static final class UpdateStrategyInstanceRequest {
+        private boolean namePresent;
+        private String name;
+        private boolean executionModePresent;
+        private String executionMode;
+        private boolean brokerAccountIdPresent;
+        private UUID brokerAccountId;
+        private boolean budgetAmountPresent;
+        private BigDecimal budgetAmount;
+        private boolean tradingModelProfileIdPresent;
+        private UUID tradingModelProfileId;
+        private boolean inputSpecOverridePresent;
+        private JsonNode inputSpecOverride;
+        private boolean executionConfigOverridePresent;
+        private JsonNode executionConfigOverride;
+        @NotNull(message = "version은 필수입니다.")
+        private Long version;
+
+        public boolean hasName() {
+            return namePresent;
+        }
+
+        public String name() {
+            return name;
+        }
+
+        @JsonSetter("name")
+        public void setName(String name) {
+            this.namePresent = true;
+            this.name = name;
+        }
+
+        public boolean hasExecutionMode() {
+            return executionModePresent;
+        }
+
+        public String executionMode() {
+            return executionMode;
+        }
+
+        @JsonSetter("executionMode")
+        public void setExecutionMode(String executionMode) {
+            this.executionModePresent = true;
+            this.executionMode = executionMode;
+        }
+
+        public boolean hasBrokerAccountId() {
+            return brokerAccountIdPresent;
+        }
+
+        public UUID brokerAccountId() {
+            return brokerAccountId;
+        }
+
+        @JsonSetter("brokerAccountId")
+        public void setBrokerAccountId(UUID brokerAccountId) {
+            this.brokerAccountIdPresent = true;
+            this.brokerAccountId = brokerAccountId;
+        }
+
+        public boolean hasBudgetAmount() {
+            return budgetAmountPresent;
+        }
+
+        public BigDecimal budgetAmount() {
+            return budgetAmount;
+        }
+
+        @JsonSetter("budgetAmount")
+        public void setBudgetAmount(BigDecimal budgetAmount) {
+            this.budgetAmountPresent = true;
+            this.budgetAmount = budgetAmount;
+        }
+
+        public boolean hasTradingModelProfileId() {
+            return tradingModelProfileIdPresent;
+        }
+
+        public UUID tradingModelProfileId() {
+            return tradingModelProfileId;
+        }
+
+        @JsonSetter("tradingModelProfileId")
+        public void setTradingModelProfileId(UUID tradingModelProfileId) {
+            this.tradingModelProfileIdPresent = true;
+            this.tradingModelProfileId = tradingModelProfileId;
+        }
+
+        public boolean hasInputSpecOverride() {
+            return inputSpecOverridePresent;
+        }
+
+        public JsonNode inputSpecOverride() {
+            return inputSpecOverride;
+        }
+
+        @JsonSetter("inputSpecOverride")
+        public void setInputSpecOverride(JsonNode inputSpecOverride) {
+            this.inputSpecOverridePresent = true;
+            this.inputSpecOverride = inputSpecOverride;
+        }
+
+        public boolean hasExecutionConfigOverride() {
+            return executionConfigOverridePresent;
+        }
+
+        public JsonNode executionConfigOverride() {
+            return executionConfigOverride;
+        }
+
+        @JsonSetter("executionConfigOverride")
+        public void setExecutionConfigOverride(JsonNode executionConfigOverride) {
+            this.executionConfigOverridePresent = true;
+            this.executionConfigOverride = executionConfigOverride;
+        }
+
+        public Long version() {
+            return version;
+        }
+
+        public void setVersion(Long version) {
+            this.version = version;
+        }
     }
 
     public record LifecycleChangeRequest(

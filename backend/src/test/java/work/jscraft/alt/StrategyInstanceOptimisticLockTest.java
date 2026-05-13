@@ -57,15 +57,17 @@ class StrategyInstanceOptimisticLockTest extends AdminCatalogApiIntegrationTestS
                 .cookie(adminLogin.sessionCookie(), adminLogin.csrfCookie())
                 .header(authProperties.getCsrfHeaderName(), adminLogin.csrfCookie().getValue())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(toJson(new StrategyInstanceService.UpdateStrategyInstanceRequest(
-                        "Optimistic Instance v2",
-                        "paper",
-                        null,
-                        new BigDecimal("1200000.0000"),
-                        modelProfile.getId(),
-                        jsonObject("scope", "held_only"),
-                        jsonObject("slippageBps", 7),
-                        createdVersion))))
+                .content("""
+                        {
+                          "name": "Optimistic Instance v2",
+                          "executionMode": "paper",
+                          "budgetAmount": 1200000,
+                          "tradingModelProfileId": "%s",
+                          "inputSpecOverride": { "scope": "held_only" },
+                          "executionConfigOverride": { "slippageBps": 7 },
+                          "version": %d
+                        }
+                        """.formatted(modelProfile.getId(), createdVersion)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -77,15 +79,17 @@ class StrategyInstanceOptimisticLockTest extends AdminCatalogApiIntegrationTestS
                 .cookie(adminLogin.sessionCookie(), adminLogin.csrfCookie())
                 .header(authProperties.getCsrfHeaderName(), adminLogin.csrfCookie().getValue())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(toJson(new StrategyInstanceService.UpdateStrategyInstanceRequest(
-                        "Optimistic Instance stale",
-                        "paper",
-                        null,
-                        new BigDecimal("1300000.0000"),
-                        modelProfile.getId(),
-                        jsonObject("scope", "held_only"),
-                        jsonObject("slippageBps", 9),
-                        createdVersion))))
+                .content("""
+                        {
+                          "name": "Optimistic Instance stale",
+                          "executionMode": "paper",
+                          "budgetAmount": 1300000,
+                          "tradingModelProfileId": "%s",
+                          "inputSpecOverride": { "scope": "held_only" },
+                          "executionConfigOverride": { "slippageBps": 9 },
+                          "version": %d
+                        }
+                        """.formatted(modelProfile.getId(), createdVersion)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("OPTIMISTIC_LOCK_CONFLICT"))
                 .andExpect(jsonPath("$.meta.currentVersion").value(updatedVersion));

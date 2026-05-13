@@ -14,6 +14,7 @@ import work.jscraft.alt.strategy.application.StrategyInstanceService;
 import work.jscraft.alt.llm.infrastructure.persistence.LlmModelProfileEntity;
 import work.jscraft.alt.ops.infrastructure.persistence.AuditLogEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.BrokerAccountEntity;
+import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstancePromptVersionEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyTemplateEntity;
 
@@ -56,9 +57,9 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                 .andExpect(jsonPath("$.data.strategyTemplateId").value(template.getId().toString()))
                 .andExpect(jsonPath("$.data.lifecycleState").value("draft"))
                 .andExpect(jsonPath("$.data.executionMode").value("paper"))
-                .andExpect(jsonPath("$.data.tradingModelProfileId").value(modelProfile.getId().toString()))
-                .andExpect(jsonPath("$.data.inputSpecOverride.scope").value("held_only"))
-                .andExpect(jsonPath("$.data.executionConfigOverride.slippageBps").value(5))
+                .andExpect(jsonPath("$.data.tradingModelProfileId").isEmpty())
+                .andExpect(jsonPath("$.data.inputSpecOverride").isEmpty())
+                .andExpect(jsonPath("$.data.executionConfigOverride").isEmpty())
                 .andExpect(jsonPath("$.data.currentPromptVersionId").isNotEmpty())
                 .andReturn()
                 .getResponse()
@@ -67,6 +68,11 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
         JsonNode created = objectMapper.readTree(createdBody).path("data");
         String strategyInstanceId = created.path("id").asText();
         long createdVersion = created.path("version").asLong();
+
+        StrategyInstanceEntity createdEntity = strategyInstanceRepository.findById(UUID.fromString(strategyInstanceId)).orElseThrow();
+        assertThat(createdEntity.getTradingModelProfile()).isNull();
+        assertThat(createdEntity.getInputSpecOverrideJson()).isNull();
+        assertThat(createdEntity.getExecutionConfigOverrideJson()).isNull();
 
         List<StrategyInstancePromptVersionEntity> promptVersions =
                 strategyInstancePromptVersionRepository.findByStrategyInstanceIdOrderByVersionNoAsc(UUID.fromString(strategyInstanceId));
@@ -77,15 +83,18 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                 .cookie(adminLogin.sessionCookie(), adminLogin.csrfCookie())
                 .header(authProperties.getCsrfHeaderName(), adminLogin.csrfCookie().getValue())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(toJson(new StrategyInstanceService.UpdateStrategyInstanceRequest(
-                        "KR 모멘텀 LIVE",
-                        "live",
-                        brokerAccount.getId(),
-                        new BigDecimal("12000000.0000"),
-                        modelProfile.getId(),
-                        jsonObject("scope", "full_watchlist"),
-                        jsonObject("slippageBps", 10),
-                        createdVersion))))
+                .content("""
+                        {
+                          "name": "KR 모멘텀 LIVE",
+                          "executionMode": "live",
+                          "brokerAccountId": "%s",
+                          "budgetAmount": 12000000,
+                          "tradingModelProfileId": "%s",
+                          "inputSpecOverride": { "scope": "full_watchlist" },
+                          "executionConfigOverride": { "slippageBps": 10 },
+                          "version": %d
+                        }
+                        """.formatted(brokerAccount.getId(), modelProfile.getId(), createdVersion)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("KR 모멘텀 LIVE"))
                 .andExpect(jsonPath("$.data.executionMode").value("live"))
@@ -123,5 +132,102 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                 "STRATEGY_INSTANCE_CREATED",
                 "STRATEGY_INSTANCE_UPDATED",
                 "STRATEGY_INSTANCE_LIFECYCLE_CHANGED");
+    }
+
+    @Test
+    void inheritedSettingsFollowTemplateUntilExplicitOverrideIsSaved() throws Exception {
+        LoginCookies adminLogin = login();
+        LlmModelProfileEntity defaultProfile = createTradingModelProfile();
+        StrategyTemplateEntity template = createStrategyTemplate("KR 모멘텀 템플릿", "template prompt v1", defaultProfile);
+
+        String createdBody = mockMvc.perform(post("/api/admin/strategy-instances")
+                .cookie(adminLogin.sessionCookie(), adminLogin.csrfCookie())
+                .header(authProperties.getCsrfHeaderName(), adminLogin.csrfCookie().getValue())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(toJson(new StrategyInstanceService.CreateStrategyInstanceRequest(
+                        template.getId(),
+                        "KR 모멘텀 A",
+                        "paper",
+                        null,
+                        new BigDecimal("10000000.0000"),
+                        null,
+                        null,
+                        null))))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String strategyInstanceId = objectMapper.readTree(createdBody).path("data").path("id").asText();
+
+        LlmModelProfileEntity nextProfile = createTradingModelProfile();
+        nextProfile.setModelName("gpt-5.5-next");
+        nextProfile = llmModelProfileRepository.saveAndFlush(nextProfile);
+
+        template.setDefaultTradingModelProfile(nextProfile);
+        template.setDefaultInputSpecJson(jsonObject("scope", "full_watchlist"));
+        template.setDefaultExecutionConfigJson(jsonObject("slippageBps", 9));
+        strategyTemplateRepository.saveAndFlush(template);
+
+        StrategyInstanceEntity reloaded = strategyInstanceRepository.findById(UUID.fromString(strategyInstanceId)).orElseThrow();
+        assertThat(reloaded.getTradingModelProfile()).isNull();
+        assertThat(reloaded.getInputSpecOverrideJson()).isNull();
+        assertThat(reloaded.getExecutionConfigOverrideJson()).isNull();
+
+        String listBody = mockMvc.perform(get("/api/admin/strategy-instances")
+                .cookie(adminLogin.sessionCookie()))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode listed = objectMapper.readTree(listBody).path("data").get(0);
+        assertThat(listed.path("id").asText()).isEqualTo(strategyInstanceId);
+        assertThat(listed.path("tradingModelProfileId").isNull()).isTrue();
+        assertThat(listed.path("inputSpecOverride").isNull()).isTrue();
+        assertThat(listed.path("executionConfigOverride").isNull()).isTrue();
+    }
+
+    @Test
+    void patchKeepsOmittedFieldsUnchanged() throws Exception {
+        LoginCookies adminLogin = login();
+        LlmModelProfileEntity modelProfile = createTradingModelProfile();
+        StrategyTemplateEntity template = createStrategyTemplate("KR 모멘텀 템플릿", "template prompt v1", modelProfile);
+
+        String createdBody = mockMvc.perform(post("/api/admin/strategy-instances")
+                .cookie(adminLogin.sessionCookie(), adminLogin.csrfCookie())
+                .header(authProperties.getCsrfHeaderName(), adminLogin.csrfCookie().getValue())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(toJson(new StrategyInstanceService.CreateStrategyInstanceRequest(
+                        template.getId(),
+                        "KR 모멘텀 A",
+                        "paper",
+                        null,
+                        new BigDecimal("10000000.0000"),
+                        null,
+                        null,
+                        null))))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode created = objectMapper.readTree(createdBody).path("data");
+        String strategyInstanceId = created.path("id").asText();
+
+        mockMvc.perform(patch("/api/admin/strategy-instances/{strategyInstanceId}", strategyInstanceId)
+                .cookie(adminLogin.sessionCookie(), adminLogin.csrfCookie())
+                .header(authProperties.getCsrfHeaderName(), adminLogin.csrfCookie().getValue())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "name": "KR 모멘텀 B",
+                          "version": %d
+                        }
+                        """.formatted(created.path("version").asLong())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("KR 모멘텀 B"))
+                .andExpect(jsonPath("$.data.executionMode").value("paper"))
+                .andExpect(jsonPath("$.data.budgetAmount").value(10000000));
     }
 }
