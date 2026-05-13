@@ -30,6 +30,9 @@ public class TradeOrderIntentEntity extends CreatedAtOnlyUuidEntity {
     @Column(name = "symbol_code", nullable = false, length = 40)
     private String symbolCode;
 
+    @Column(name = "symbol_name", nullable = false, length = 200)
+    private String symbolName;
+
     @Column(nullable = false, length = 10)
     private String side;
 
@@ -74,6 +77,14 @@ public class TradeOrderIntentEntity extends CreatedAtOnlyUuidEntity {
 
     public void setSymbolCode(String symbolCode) {
         this.symbolCode = symbolCode;
+    }
+
+    public String getSymbolName() {
+        return symbolName;
+    }
+
+    public void setSymbolName(String symbolName) {
+        this.symbolName = symbolName;
     }
 
     public String getSide() {

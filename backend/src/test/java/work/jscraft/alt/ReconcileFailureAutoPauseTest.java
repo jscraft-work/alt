@@ -127,6 +127,7 @@ class ReconcileFailureAutoPauseTest extends TradingCycleIntegrationTestSupport {
         intent.setTradeDecisionLog(decisionLog);
         intent.setSequenceNo(1);
         intent.setSymbolCode("005930");
+        intent.setSymbolName("Test Stock");
         intent.setSide("BUY");
         intent.setOrderType("LIMIT");
         intent.setQuantity(new BigDecimal("5"));

@@ -168,6 +168,7 @@ class ChartApiTest extends AdminCatalogApiIntegrationTestSupport {
         intent.setTradeDecisionLog(decision);
         intent.setSequenceNo(1);
         intent.setSymbolCode(symbolCode);
+        intent.setSymbolName("Test Stock");
         intent.setSide(side);
         intent.setQuantity(new BigDecimal("5.00000000"));
         intent.setOrderType("LIMIT");

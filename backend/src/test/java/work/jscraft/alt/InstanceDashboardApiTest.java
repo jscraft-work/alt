@@ -103,6 +103,7 @@ class InstanceDashboardApiTest extends AdminCatalogApiIntegrationTestSupport {
         intent.setTradeDecisionLog(decision);
         intent.setSequenceNo(1);
         intent.setSymbolCode(samsung.getSymbolCode());
+        intent.setSymbolName("Test Stock");
         intent.setSide("BUY");
         intent.setQuantity(new BigDecimal("5.00000000"));
         intent.setOrderType("LIMIT");

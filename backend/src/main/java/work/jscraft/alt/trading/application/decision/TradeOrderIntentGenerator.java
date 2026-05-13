@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import work.jscraft.alt.marketdata.infrastructure.persistence.AssetMasterRepository;
 import work.jscraft.alt.trading.application.decision.ParsedDecision.ParsedOrder;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeDecisionLogEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentEntity;
@@ -14,10 +15,16 @@ import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentRepos
 @Service
 public class TradeOrderIntentGenerator {
 
-    private final TradeOrderIntentRepository tradeOrderIntentRepository;
+    private static final String UNKNOWN_SYMBOL_NAME = "(unknown)";
 
-    public TradeOrderIntentGenerator(TradeOrderIntentRepository tradeOrderIntentRepository) {
+    private final TradeOrderIntentRepository tradeOrderIntentRepository;
+    private final AssetMasterRepository assetMasterRepository;
+
+    public TradeOrderIntentGenerator(
+            TradeOrderIntentRepository tradeOrderIntentRepository,
+            AssetMasterRepository assetMasterRepository) {
         this.tradeOrderIntentRepository = tradeOrderIntentRepository;
+        this.assetMasterRepository = assetMasterRepository;
     }
 
     @Transactional
@@ -28,6 +35,7 @@ public class TradeOrderIntentGenerator {
             intent.setTradeDecisionLog(decisionLog);
             intent.setSequenceNo(order.sequenceNo());
             intent.setSymbolCode(order.symbolCode());
+            intent.setSymbolName(resolveSymbolName(order.symbolCode()));
             intent.setSide(order.side());
             intent.setQuantity(order.quantity());
             intent.setOrderType(order.orderType());
@@ -37,5 +45,11 @@ public class TradeOrderIntentGenerator {
             created.add(tradeOrderIntentRepository.saveAndFlush(intent));
         }
         return created;
+    }
+
+    private String resolveSymbolName(String symbolCode) {
+        return assetMasterRepository.findBySymbolCode(symbolCode)
+                .map(am -> am.getSymbolName())
+                .orElse(UNKNOWN_SYMBOL_NAME);
     }
 }

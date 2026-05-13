@@ -148,6 +148,7 @@ class LiveOrderPartialFillTest extends TradingCycleIntegrationTestSupport {
         intent.setTradeDecisionLog(decisionLog);
         intent.setSequenceNo(1);
         intent.setSymbolCode(symbol);
+        intent.setSymbolName("Test Stock");
         intent.setSide(side);
         intent.setOrderType(orderType);
         intent.setQuantity(qty);

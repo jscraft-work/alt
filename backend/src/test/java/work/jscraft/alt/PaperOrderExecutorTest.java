@@ -223,6 +223,7 @@ class PaperOrderExecutorTest extends TradingCycleIntegrationTestSupport {
         intent.setTradeDecisionLog(decisionLog);
         intent.setSequenceNo(seq);
         intent.setSymbolCode(symbol);
+        intent.setSymbolName("Test Stock");
         intent.setSide(side);
         intent.setOrderType(orderType);
         intent.setQuantity(qty);

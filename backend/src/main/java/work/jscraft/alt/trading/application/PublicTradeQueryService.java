@@ -104,10 +104,13 @@ public class PublicTradeQueryService {
     public TradeOrderDetail getTradeOrder(UUID tradeOrderId) {
         TradeOrderEntity order = tradeOrderRepository.findById(tradeOrderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."));
+        TradeOrderIntentEntity intent = order.getTradeOrderIntent();
         return new TradeOrderDetail(
                 order.getId(),
-                order.getTradeOrderIntent().getId(),
+                intent.getId(),
                 order.getStrategyInstance().getId(),
+                intent.getSymbolCode(),
+                intent.getSymbolName(),
                 order.getClientOrderId(),
                 order.getBrokerOrderNo(),
                 order.getExecutionMode(),
@@ -215,12 +218,14 @@ public class PublicTradeQueryService {
     }
 
     private TradeOrderListItem toOrderListItem(TradeOrderEntity order) {
+        TradeOrderIntentEntity intent = order.getTradeOrderIntent();
         return new TradeOrderListItem(
                 order.getId(),
                 order.getStrategyInstance().getId(),
                 order.getStrategyInstance().getName(),
-                order.getTradeOrderIntent().getSymbolCode(),
-                order.getTradeOrderIntent().getSide(),
+                intent.getSymbolCode(),
+                intent.getSymbolName(),
+                intent.getSide(),
                 order.getExecutionMode(),
                 order.getOrderStatus(),
                 order.getRequestedQuantity(),
