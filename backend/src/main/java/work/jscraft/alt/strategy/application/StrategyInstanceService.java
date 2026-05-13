@@ -39,6 +39,9 @@ import work.jscraft.alt.strategy.infrastructure.persistence.StrategyTemplateEnti
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyTemplateRepository;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceWatchlistRelationEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceWatchlistRelationRepository;
+import work.jscraft.alt.trading.application.inputspec.PromptInputSpec;
+import work.jscraft.alt.trading.application.inputspec.PromptInputSpecException;
+import work.jscraft.alt.trading.application.inputspec.PromptInputSpecParser;
 
 @Service
 @Transactional(readOnly = true)
@@ -71,6 +74,7 @@ public class StrategyInstanceService {
     private final LlmModelProfileRepository llmModelProfileRepository;
     private final AssetMasterRepository assetMasterRepository;
     private final AuditLogService auditLogService;
+    private final PromptInputSpecParser promptInputSpecParser;
 
     public StrategyInstanceService(
             StrategyInstanceRepository strategyInstanceRepository,
@@ -80,7 +84,8 @@ public class StrategyInstanceService {
             BrokerAccountRepository brokerAccountRepository,
             LlmModelProfileRepository llmModelProfileRepository,
             AssetMasterRepository assetMasterRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            PromptInputSpecParser promptInputSpecParser) {
         this.strategyInstanceRepository = strategyInstanceRepository;
         this.strategyTemplateRepository = strategyTemplateRepository;
         this.promptVersionRepository = promptVersionRepository;
@@ -89,6 +94,7 @@ public class StrategyInstanceService {
         this.llmModelProfileRepository = llmModelProfileRepository;
         this.assetMasterRepository = assetMasterRepository;
         this.auditLogService = auditLogService;
+        this.promptInputSpecParser = promptInputSpecParser;
     }
 
     public List<StrategyInstanceView> listStrategyInstances(String lifecycleState, String executionMode) {
@@ -388,19 +394,24 @@ public class StrategyInstanceService {
     }
 
     private void validateActivatable(StrategyInstanceEntity entity) {
-        if (entity.getCurrentPromptVersion() == null
-                || entity.getCurrentPromptVersion().getPromptText() == null
-                || entity.getCurrentPromptVersion().getPromptText().isBlank()) {
+        String promptText = entity.getCurrentPromptVersion() == null
+                ? null
+                : entity.getCurrentPromptVersion().getPromptText();
+        if (promptText == null || promptText.isBlank()) {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "현재 프롬프트가 없어 활성화할 수 없습니다.");
+        }
+        PromptInputSpec parsedInputSpec;
+        try {
+            parsedInputSpec = promptInputSpecParser.parse(promptText);
+        } catch (PromptInputSpecException ex) {
+            throw new ApiConflictException(
+                    "INSTANCE_NOT_ACTIVATABLE",
+                    "prompt frontmatter가 유효하지 않습니다: " + ex.getMessage());
         }
 
         LlmModelProfileEntity modelProfile = effectiveTradingModelProfile(entity);
         if (modelProfile == null || !PURPOSE_TRADING_DECISION.equals(modelProfile.getPurpose())) {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "트레이딩 모델이 없어 활성화할 수 없습니다.");
-        }
-
-        if (effectiveInputSpec(entity) == null) {
-            throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "입력 스펙이 없어 활성화할 수 없습니다.");
         }
 
         if (entity.getStrategyTemplate().getDefaultCycleMinutes() <= 0) {
@@ -411,7 +422,7 @@ public class StrategyInstanceService {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "전략 예산이 없어 활성화할 수 없습니다.");
         }
 
-        if (INPUT_SCOPE_FULL_WATCHLIST.equals(resolveInputScope(entity))
+        if (parsedInputSpec.scope() == PromptInputSpec.Scope.FULL_WATCHLIST
                 && !watchlistRelationRepository.existsByStrategyInstanceId(entity.getId())) {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "full_watchlist 범위는 감시 종목이 1개 이상 있어야 활성화할 수 있습니다.");
         }

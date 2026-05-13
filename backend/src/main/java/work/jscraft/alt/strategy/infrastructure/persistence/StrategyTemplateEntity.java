@@ -40,7 +40,7 @@ public class StrategyTemplateEntity extends SoftDeletableUuidEntity {
     private String defaultPromptText;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "default_input_spec_json", nullable = false, columnDefinition = "jsonb")
+    @Column(name = "default_input_spec_json", columnDefinition = "jsonb")
     private JsonNode defaultInputSpecJson;
 
     @JdbcTypeCode(SqlTypes.JSON)
