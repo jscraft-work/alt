@@ -8,6 +8,7 @@ import java.util.Map;
 
 import work.jscraft.alt.marketdata.application.MarketDataException;
 import work.jscraft.alt.marketdata.application.MarketDataGateway;
+import work.jscraft.alt.marketdata.application.MarketDataSnapshots.FundamentalSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.MinuteBar;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.OrderBookSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.PriceSnapshot;
@@ -87,5 +88,11 @@ class FakeMarketDataGateway implements MarketDataGateway {
                     "no fake orderbook for " + symbolCode);
         }
         return snapshot;
+    }
+
+    @Override
+    public FundamentalSnapshot fetchFundamental(String symbolCode) {
+        throw new MarketDataException(MarketDataException.Category.EMPTY_RESPONSE, "fake",
+                "no fake fundamental for " + symbolCode);
     }
 }

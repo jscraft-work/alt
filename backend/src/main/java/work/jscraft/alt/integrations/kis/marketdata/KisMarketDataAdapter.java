@@ -42,6 +42,7 @@ import work.jscraft.alt.integrations.kis.KisProperties;
 import work.jscraft.alt.marketdata.application.MarketDataException;
 import work.jscraft.alt.marketdata.application.MarketDataException.Category;
 import work.jscraft.alt.marketdata.application.MarketDataGateway;
+import work.jscraft.alt.marketdata.application.MarketDataSnapshots.FundamentalSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.MinuteBar;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.OrderBookSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.PriceSnapshot;
@@ -131,6 +132,26 @@ public class KisMarketDataAdapter implements MarketDataGateway {
         OffsetDateTime snapshotAt = nowKst();
         return new PriceSnapshot(symbolCode, snapshotAt, lastPrice, openPrice, highPrice, lowPrice,
                 volume, VENDOR);
+    }
+
+    @Override
+    public FundamentalSnapshot fetchFundamental(String symbolCode) {
+        requireSymbol(symbolCode);
+        String url = UriComponentsBuilder
+                .fromUriString(properties.getBaseUrl())
+                .path(PATH_INQUIRE_PRICE)
+                .queryParam("fid_cond_mrkt_div_code", "J")
+                .queryParam("fid_input_iscd", symbolCode)
+                .build()
+                .toUriString();
+
+        JsonNode root = getJsonWithTokenRotation(url, TR_ID_PRICE, Map.of(), "펀더멘털 조회");
+        JsonNode output = root.get("output");
+        if (output == null || output.isNull() || !output.isObject()) {
+            throw new MarketDataException(Category.INVALID_RESPONSE, VENDOR,
+                    "KIS 펀더멘털 응답 output 필드가 없다");
+        }
+        return new FundamentalSnapshot(symbolCode, nowKst(), output, VENDOR);
     }
 
     @Override
