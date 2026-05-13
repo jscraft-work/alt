@@ -16,26 +16,27 @@ class LlmExecutablePropertiesBindingTest {
     private LlmExecutableProperties llmExecutableProperties;
 
     @Test
-    void openclawDefaultsBindFromApplicationYaml() {
-        LlmExecutableProperties.Provider openclaw = llmExecutableProperties.getOpenclaw();
-        assertThat(openclaw.getCommand()).isEqualTo("/usr/local/bin/openclaw");
-        assertThat(openclaw.getTimeoutSeconds()).isEqualTo(60);
+    void baseUrlBindsFromApplicationYaml() {
+        assertThat(llmExecutableProperties.getBaseUrl())
+                .isEqualTo("http://host.docker.internal:18000");
     }
 
     @Test
-    void nanobotDefaultsBindFromApplicationYaml() {
-        LlmExecutableProperties.Provider nanobot = llmExecutableProperties.getNanobot();
-        assertThat(nanobot.getCommand()).isEqualTo("/usr/local/bin/nanobot");
-        assertThat(nanobot.getTimeoutSeconds()).isEqualTo(60);
+    void openclawTimeoutBindsFromApplicationYaml() {
+        assertThat(llmExecutableProperties.getOpenclaw().getTimeoutSeconds()).isEqualTo(60);
+    }
+
+    @Test
+    void nanobotTimeoutBindsFromApplicationYaml() {
+        assertThat(llmExecutableProperties.getNanobot().getTimeoutSeconds()).isEqualTo(120);
     }
 
     @Test
     void forProviderReturnsMatchingProvider() {
-        LlmExecutableProperties.Provider openclaw = llmExecutableProperties.forProvider("openclaw");
-        assertThat(openclaw).isSameAs(llmExecutableProperties.getOpenclaw());
-
-        LlmExecutableProperties.Provider nanobot = llmExecutableProperties.forProvider("nanobot");
-        assertThat(nanobot).isSameAs(llmExecutableProperties.getNanobot());
+        assertThat(llmExecutableProperties.forProvider("openclaw"))
+                .isSameAs(llmExecutableProperties.getOpenclaw());
+        assertThat(llmExecutableProperties.forProvider("nanobot"))
+                .isSameAs(llmExecutableProperties.getNanobot());
     }
 
     @Test
@@ -43,5 +44,13 @@ class LlmExecutablePropertiesBindingTest {
         assertThatThrownBy(() -> llmExecutableProperties.forProvider("unknown"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("unknown");
+    }
+
+    @Test
+    void levelOfMapsProviderToWrapperLevel() {
+        assertThat(LlmExecutableProperties.levelOf("openclaw")).isEqualTo("normal");
+        assertThat(LlmExecutableProperties.levelOf("nanobot")).isEqualTo("high");
+        assertThatThrownBy(() -> LlmExecutableProperties.levelOf("unknown"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

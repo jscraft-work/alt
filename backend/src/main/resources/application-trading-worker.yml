@@ -2,6 +2,17 @@ spring:
   main:
     web-application-type: none
 
+# db-scheduler is enabled ONLY in trading-worker profile.
+# In web-app/collector-worker profiles it stays disabled (see application.yml default).
+# threads = max concurrent cycle executions (≈ concurrent LLM subprocess upper bound).
+# Same-instance serial execution is guaranteed by (task_name, task_instance) primary key
+# + picked flag inside scheduled_tasks, so no external lock is needed.
+db-scheduler:
+  enabled: true
+  threads: 4
+  polling-interval: 5s
+  heartbeat-interval: 30s
+
 app:
   runtime:
     role: trading-worker

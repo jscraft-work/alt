@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import work.jscraft.alt.integrations.openclaw.LlmSubprocessAdapter;
 import work.jscraft.alt.llm.infrastructure.persistence.LlmModelProfileEntity;
 import work.jscraft.alt.llm.infrastructure.persistence.LlmModelProfileRepository;
 import work.jscraft.alt.news.application.NewsAssessmentEngine;
@@ -44,17 +43,17 @@ public class LlmNewsAssessmentAdapter implements NewsAssessmentEngine {
     private static final Logger log = LoggerFactory.getLogger(LlmNewsAssessmentAdapter.class);
 
     private final LlmModelProfileRepository repository;
-    private final LlmSubprocessAdapter subprocessAdapter;
+    private final LlmHttpAdapter httpAdapter;
     private final LlmExecutableProperties executableProperties;
     private final ObjectMapper objectMapper;
 
     public LlmNewsAssessmentAdapter(
             LlmModelProfileRepository repository,
-            LlmSubprocessAdapter subprocessAdapter,
+            LlmHttpAdapter httpAdapter,
             LlmExecutableProperties executableProperties,
             ObjectMapper objectMapper) {
         this.repository = repository;
-        this.subprocessAdapter = subprocessAdapter;
+        this.httpAdapter = httpAdapter;
         this.executableProperties = executableProperties;
         this.objectMapper = objectMapper;
     }
@@ -83,9 +82,9 @@ public class LlmNewsAssessmentAdapter implements NewsAssessmentEngine {
                 prompt,
                 timeout);
 
-        LlmCallResult result = subprocessAdapter.execute(llmRequest);
+        LlmCallResult result = httpAdapter.execute(llmRequest);
         if (!result.isSuccess()) {
-            log.warn("news_assessment subprocess failed: callStatus={} failureMessage={}",
+            log.warn("news_assessment http call failed: callStatus={} failureMessage={}",
                     result.callStatus(), result.failureMessage());
             return new Verdict(UsefulnessStatus.UNCLASSIFIED, profile.getId());
         }

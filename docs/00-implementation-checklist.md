@@ -232,19 +232,19 @@
 체크리스트:
 
 - [x] trading-worker 실행 엔트리포인트 구현
-- [x] 활성 인스턴스 스케줄링 구현
-- [x] Redis 락 획득 구현
+- [x] 활성 인스턴스 스케줄링 구현 — db-scheduler `recurringWithPersistentSchedule` + `TradingCycleReconciler` (state-based reconciler가 1분 주기로 `strategy_instance` ↔ `scheduled_tasks` 동기화)
+- [x] 인스턴스별 직렬 실행 보장 — `scheduled_tasks` `(task_name, task_instance)` PK + `picked` 플래그. 외부 Redis 락 미사용 (구 `TradingInstanceLock` 제거)
 - [x] `trade_cycle_log` 생성 및 단계 갱신 구현
 - [x] 판단 시점 설정값 고정 구현
 - [x] 입력 데이터 조립기 구현
-- [x] LLM subprocess 호출기 구현
+- [x] LLM HTTP 호출기 구현 (`LlmHttpAdapter` — 호스트 launchd wrapper `POST /ask`)
 - [x] LLM 응답 파싱 및 내용 검증 구현
 - [x] `trade_decision_log` 기록 구현
 - [x] `trade_order_intent` 생성 구현
 - [x] 최소 안전검증 구현
-- [x] `ops_event` 기록 구현
-- [x] Telegram 운영 알림 연동 구현
-- [x] 비용 추정 합산 및 상한 초과 알림 구현
+- [x] `ops_event` 기록 구현 (trading 측: `TradingOpsEventRecorder` — llm_failed, decision_parse_failed, reconcile_failed, auto_paused, live_order_failed)
+- [x] Telegram 운영 알림 연동 구현 (`TradingIncidentReporter`가 LLM/decision/reconcile/auto_paused/live order 실패 시 `AlertGateway.dispatch` 호출)
+- [ ] 비용 추정 합산 및 상한 초과 알림 구현 — v1 범위에서 보류 (LLM 호출이 무료라 우선순위 낮음)
 
 완료 기준:
 
@@ -357,11 +357,20 @@
 
 ## 15. 남은 항목 요약
 
-코드/테스트는 17개 task 모두 통과한 상태이며, 다음 항목은 운영/배포 산출물로 따로 닫아야 한다.
+코드/테스트는 v1 범위에서 닫혔고, 다음만 남았다.
 
-- [ ] reverse proxy 배포 설정 문서화 (`DEPLOY.md` 또는 `docs/` 별도 문서)
-- [ ] GitHub Actions 배포 흐름 정리
-- [ ] GitHub Secrets → 서버 `.env` 주입 자동화 스크립트/문서
-- [ ] task 16 수동 완료 조건: KIS sandbox 또는 실계좌에서 주문 제출/상태 조회 1회 검증, 결과 운영 문서에 기록
-- [ ] task 17 수동 완료 조건: 운영 배포 문서와 시크릿 주입 절차를 실 서버 기준 1회 검증, 결과 운영 문서에 기록
-- [ ] Telegram 실제 chat ID로 발송 본문/마스킹/음소거 동작 사람 눈 확인
+### 코드 영역 (보류)
+- [ ] 비용 추정 합산 및 일일 상한 초과 알림 — 무료 LLM 사용 중이라 v1 보류
+
+### 운영/배포 산출물
+- [x] reverse proxy 배포 설정 문서화 — `jscraft-infra/docs/deployment.md` + `alt-java/DEPLOY.md`로 갈음
+- [x] GitHub Actions 배포 흐름 정리 — `alt-java/.github/workflows/ci.yml` (Deploy workflow) 완료
+- [x] GitHub Secrets → 서버 `.env` 주입 자동화 — deploy 서버 `/webhook/env-sync` (jscraft-infra/deploy/index.js) 완료
+- [x] postgres init.sql에 `alt` DB 멱등 생성 추가 — 운영 서버는 PGDATA가 이미 차 있어서 자동 실행은 안 되며, 운영자가 한 번 `CREATE DATABASE alt` 수동 실행 필요
+
+### 수동 검증 게이트 (사람 손)
+- [ ] db-scheduler 운영자 시나리오 검증 — active 토글 → `scheduled_tasks` row 생성/cancel, 워커 kill 후 재기동 시 사이클 이어짐 확인
+- [ ] KIS sandbox 또는 실계좌에서 live 주문 1회 제출/상태 조회 검증
+- [ ] 실 서버에 배포 후 health/사이클 1회 통과 확인
+- [ ] Telegram 실제 chat ID로 LLM/reconcile/auto_paused 알림 발송 — 본문/마스킹/음소거 동작 사람 눈 확인
+- [ ] LLM HTTP wrapper(맥미니 launchd `127.0.0.1:18000`) 실 호출 1회 — `host.docker.internal:18000`이 컨테이너에서 도달하는지 확인

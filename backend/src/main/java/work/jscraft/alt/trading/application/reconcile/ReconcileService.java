@@ -18,6 +18,7 @@ import work.jscraft.alt.trading.application.broker.BrokerGateway;
 import work.jscraft.alt.trading.application.broker.BrokerGatewayException;
 import work.jscraft.alt.trading.application.broker.OrderStatusResult;
 import work.jscraft.alt.trading.application.broker.PlaceOrderResult;
+import work.jscraft.alt.trading.application.ops.TradingIncidentReporter;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderRepository;
 
@@ -35,6 +36,7 @@ public class ReconcileService {
     private final TradeOrderRepository tradeOrderRepository;
     private final StrategyInstanceRepository strategyInstanceRepository;
     private final PortfolioUpdateService portfolioUpdateService;
+    private final TradingIncidentReporter incidentReporter;
     private final Clock clock;
 
     public ReconcileService(
@@ -42,11 +44,13 @@ public class ReconcileService {
             TradeOrderRepository tradeOrderRepository,
             StrategyInstanceRepository strategyInstanceRepository,
             PortfolioUpdateService portfolioUpdateService,
+            TradingIncidentReporter incidentReporter,
             Clock clock) {
         this.brokerGateway = brokerGateway;
         this.tradeOrderRepository = tradeOrderRepository;
         this.strategyInstanceRepository = strategyInstanceRepository;
         this.portfolioUpdateService = portfolioUpdateService;
+        this.incidentReporter = incidentReporter;
         this.clock = clock;
     }
 
@@ -84,6 +88,7 @@ public class ReconcileService {
         instance.setAutoPausedReason(reason);
         instance.setAutoPausedAt(OffsetDateTime.now(clock));
         strategyInstanceRepository.saveAndFlush(instance);
+        incidentReporter.reportAutoPaused(instance, reason);
     }
 
     private void applyStatusUpdate(

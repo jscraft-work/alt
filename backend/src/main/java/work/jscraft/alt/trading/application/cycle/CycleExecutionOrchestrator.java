@@ -32,6 +32,7 @@ import work.jscraft.alt.trading.application.decision.TradeDecisionLogService.Llm
 import work.jscraft.alt.trading.application.decision.TradeOrderIntentGenerator;
 import work.jscraft.alt.trading.application.decision.TradingDecisionEngine;
 import work.jscraft.alt.trading.application.inputspec.InputAssembler;
+import work.jscraft.alt.trading.application.ops.TradingIncidentReporter;
 import work.jscraft.alt.trading.application.order.LiveOrderExecutor;
 import work.jscraft.alt.trading.application.order.PaperOrderExecutor;
 import work.jscraft.alt.trading.application.reconcile.ReconcileService;
@@ -49,7 +50,6 @@ public class CycleExecutionOrchestrator {
     public static final String EXECUTION_MODE_LIVE = "live";
 
     private final StrategyInstanceRepository strategyInstanceRepository;
-    private final TradingInstanceLock instanceLock;
     private final TradingWindowPolicy tradingWindowPolicy;
     private final SettingsSnapshotProvider snapshotProvider;
     private final TradeCycleLifecycle lifecycle;
@@ -64,12 +64,12 @@ public class CycleExecutionOrchestrator {
     private final ReconcileService reconcileService;
     private final LlmModelProfileRepository llmModelProfileRepository;
     private final LlmExecutableProperties llmExecutableProperties;
+    private final TradingIncidentReporter incidentReporter;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public CycleExecutionOrchestrator(
             StrategyInstanceRepository strategyInstanceRepository,
-            TradingInstanceLock instanceLock,
             TradingWindowPolicy tradingWindowPolicy,
             SettingsSnapshotProvider snapshotProvider,
             TradeCycleLifecycle lifecycle,
@@ -84,10 +84,10 @@ public class CycleExecutionOrchestrator {
             ReconcileService reconcileService,
             LlmModelProfileRepository llmModelProfileRepository,
             LlmExecutableProperties llmExecutableProperties,
+            TradingIncidentReporter incidentReporter,
             ObjectMapper objectMapper,
             Clock clock) {
         this.strategyInstanceRepository = strategyInstanceRepository;
-        this.instanceLock = instanceLock;
         this.tradingWindowPolicy = tradingWindowPolicy;
         this.snapshotProvider = snapshotProvider;
         this.lifecycle = lifecycle;
@@ -102,54 +102,49 @@ public class CycleExecutionOrchestrator {
         this.reconcileService = reconcileService;
         this.llmModelProfileRepository = llmModelProfileRepository;
         this.llmExecutableProperties = llmExecutableProperties;
+        this.incidentReporter = incidentReporter;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
 
     public CycleResult runOnce(UUID strategyInstanceId, String workerId) {
-        if (!instanceLock.tryAcquire(strategyInstanceId, workerId)) {
-            return CycleResult.skipped(SkipReason.LOCK_NOT_ACQUIRED);
+        Optional<StrategyInstanceEntity> maybeInstance = strategyInstanceRepository.findById(strategyInstanceId);
+        if (maybeInstance.isEmpty()) {
+            return CycleResult.skipped(SkipReason.INSTANCE_NOT_FOUND);
         }
-        try {
-            Optional<StrategyInstanceEntity> maybeInstance = strategyInstanceRepository.findById(strategyInstanceId);
-            if (maybeInstance.isEmpty()) {
-                return CycleResult.skipped(SkipReason.INSTANCE_NOT_FOUND);
-            }
-            StrategyInstanceEntity instance = maybeInstance.get();
-            if (!LIFECYCLE_STATE_ACTIVE.equals(instance.getLifecycleState())) {
-                return CycleResult.skipped(SkipReason.NOT_ACTIVE);
-            }
-            if (instance.getAutoPausedReason() != null) {
-                return CycleResult.skipped(SkipReason.AUTO_PAUSED);
-            }
-            OffsetDateTime now = OffsetDateTime.now(clock);
-            if (!tradingWindowPolicy.isWithinWindow(now)) {
-                return CycleResult.skipped(SkipReason.OUT_OF_WINDOW);
-            }
-
-            SettingsSnapshot snapshot = snapshotProvider.capture(strategyInstanceId);
-            UUID cycleLogId = lifecycle.startCycle(instance);
-            String nextStage = EXECUTION_MODE_LIVE.equals(instance.getExecutionMode())
-                    ? TradeCycleLifecycle.STAGE_RECONCILE_PENDING
-                    : TradeCycleLifecycle.STAGE_INPUT_LOADING;
-            lifecycle.advance(cycleLogId, nextStage);
-
-            if (EXECUTION_MODE_LIVE.equals(instance.getExecutionMode())) {
-                ReconcileResult reconcileResult = reconcileService.reconcile(instance);
-                if (!reconcileResult.success()) {
-                    reconcileService.markAutoPaused(instance.getId(), ReconcileService.AUTO_PAUSED_REASON);
-                    lifecycle.failWithAutoPause(cycleLogId, "RECONCILE_FAILED",
-                            reconcileResult.failureMessage(), ReconcileService.AUTO_PAUSED_REASON);
-                    return CycleResult.failed(cycleLogId, reconcileResult.failureMessage());
-                }
-                lifecycle.advance(cycleLogId, TradeCycleLifecycle.STAGE_INPUT_LOADING);
-                return runMainPipeline(instance, cycleLogId, snapshot, true);
-            }
-
-            return runMainPipeline(instance, cycleLogId, snapshot, false);
-        } finally {
-            instanceLock.release(strategyInstanceId, workerId);
+        StrategyInstanceEntity instance = maybeInstance.get();
+        if (!LIFECYCLE_STATE_ACTIVE.equals(instance.getLifecycleState())) {
+            return CycleResult.skipped(SkipReason.NOT_ACTIVE);
         }
+        if (instance.getAutoPausedReason() != null) {
+            return CycleResult.skipped(SkipReason.AUTO_PAUSED);
+        }
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        if (!tradingWindowPolicy.isWithinWindow(now)) {
+            return CycleResult.skipped(SkipReason.OUT_OF_WINDOW);
+        }
+
+        SettingsSnapshot snapshot = snapshotProvider.capture(strategyInstanceId);
+        UUID cycleLogId = lifecycle.startCycle(instance);
+        String nextStage = EXECUTION_MODE_LIVE.equals(instance.getExecutionMode())
+                ? TradeCycleLifecycle.STAGE_RECONCILE_PENDING
+                : TradeCycleLifecycle.STAGE_INPUT_LOADING;
+        lifecycle.advance(cycleLogId, nextStage);
+
+        if (EXECUTION_MODE_LIVE.equals(instance.getExecutionMode())) {
+            ReconcileResult reconcileResult = reconcileService.reconcile(instance);
+            if (!reconcileResult.success()) {
+                incidentReporter.reportReconcileFailure(instance, reconcileResult.failureMessage());
+                reconcileService.markAutoPaused(instance.getId(), ReconcileService.AUTO_PAUSED_REASON);
+                lifecycle.failWithAutoPause(cycleLogId, "RECONCILE_FAILED",
+                        reconcileResult.failureMessage(), ReconcileService.AUTO_PAUSED_REASON);
+                return CycleResult.failed(cycleLogId, reconcileResult.failureMessage());
+            }
+            lifecycle.advance(cycleLogId, TradeCycleLifecycle.STAGE_INPUT_LOADING);
+            return runMainPipeline(instance, cycleLogId, snapshot, true);
+        }
+
+        return runMainPipeline(instance, cycleLogId, snapshot, false);
     }
 
     private CycleResult runMainPipeline(
@@ -176,6 +171,7 @@ public class CycleExecutionOrchestrator {
                     "LLM_" + llmResult.callStatus().name(),
                     llmResult.failureMessage());
             lifecycle.fail(cycleLogId, "LLM_" + llmResult.callStatus().name(), llmResult.failureMessage());
+            incidentReporter.reportLlmFailure(instance, cycleLogId, llmResult);
             return CycleResult.failed(cycleLogId, llmResult.failureMessage());
         }
 
@@ -189,6 +185,7 @@ public class CycleExecutionOrchestrator {
                     "DECISION_" + ex.reason().name(),
                     ex.getMessage());
             lifecycle.fail(cycleLogId, "DECISION_" + ex.reason().name(), ex.getMessage());
+            incidentReporter.reportDecisionParseFailure(instance, cycleLogId, ex);
             return CycleResult.failed(cycleLogId, ex.getMessage());
         }
 
@@ -245,7 +242,6 @@ public class CycleExecutionOrchestrator {
     }
 
     public enum SkipReason {
-        LOCK_NOT_ACQUIRED,
         INSTANCE_NOT_FOUND,
         NOT_ACTIVE,
         AUTO_PAUSED,

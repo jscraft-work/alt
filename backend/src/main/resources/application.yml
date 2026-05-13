@@ -48,6 +48,9 @@ management:
 server:
   port: ${SERVER_PORT:8081}
 
+db-scheduler:
+  enabled: false
+
 app:
   timezone: Asia/Seoul
   runtime:
@@ -56,12 +59,11 @@ app:
     jwt-secret: ${AUTH_JWT_SECRET:change-this-jwt-secret-change-this-jwt-secret}
     trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:}
   llm:
+    base-url: ${LLM_HTTP_BASE_URL:http://host.docker.internal:18000}
     openclaw:
-      command: ${LLM_OPENCLAW_COMMAND:/usr/local/bin/openclaw}
       timeout-seconds: ${LLM_OPENCLAW_TIMEOUT_SECONDS:60}
     nanobot:
-      command: ${LLM_NANOBOT_COMMAND:/usr/local/bin/nanobot}
-      timeout-seconds: ${LLM_NANOBOT_TIMEOUT_SECONDS:60}
+      timeout-seconds: ${LLM_NANOBOT_TIMEOUT_SECONDS:120}
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     chat-id: ${TELEGRAM_CHAT_ID:}

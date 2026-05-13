@@ -24,6 +24,7 @@ import work.jscraft.alt.trading.application.broker.BrokerGateway;
 import work.jscraft.alt.trading.application.broker.BrokerGatewayException;
 import work.jscraft.alt.trading.application.broker.BrokerOrderRequest;
 import work.jscraft.alt.trading.application.broker.PlaceOrderResult;
+import work.jscraft.alt.trading.application.ops.TradingIncidentReporter;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderRepository;
@@ -41,6 +42,7 @@ public class LiveOrderExecutor {
     private final TradeOrderRepository tradeOrderRepository;
     private final PortfolioUpdateService portfolioUpdateService;
     private final BrokerAccountRepository brokerAccountRepository;
+    private final TradingIncidentReporter incidentReporter;
     private final Clock clock;
 
     public LiveOrderExecutor(
@@ -48,11 +50,13 @@ public class LiveOrderExecutor {
             TradeOrderRepository tradeOrderRepository,
             PortfolioUpdateService portfolioUpdateService,
             BrokerAccountRepository brokerAccountRepository,
+            TradingIncidentReporter incidentReporter,
             Clock clock) {
         this.brokerGateway = brokerGateway;
         this.tradeOrderRepository = tradeOrderRepository;
         this.portfolioUpdateService = portfolioUpdateService;
         this.brokerAccountRepository = brokerAccountRepository;
+        this.incidentReporter = incidentReporter;
         this.clock = clock;
     }
 
@@ -98,7 +102,9 @@ public class LiveOrderExecutor {
         try {
             result = brokerGateway.placeOrder(request);
         } catch (BrokerGatewayException ex) {
-            return persistFailureOrder(instance, intent, clientOrderId, ex.getMessage());
+            TradeOrderEntity persisted = persistFailureOrder(instance, intent, clientOrderId, ex.getMessage());
+            incidentReporter.reportLiveOrderFailure(instance, intent, clientOrderId, ex.getMessage());
+            return persisted;
         }
 
         OffsetDateTime now = OffsetDateTime.now(clock);
@@ -120,7 +126,11 @@ public class LiveOrderExecutor {
             order.setFailedAt(now);
             order.setFailureReason(result.failureReason());
             order.setPortfolioAfterJson(snapshotJson(instance.getId()));
-            return tradeOrderRepository.saveAndFlush(order);
+            TradeOrderEntity persisted = tradeOrderRepository.saveAndFlush(order);
+            incidentReporter.reportLiveOrderFailure(
+                    instance, intent, persisted.getClientOrderId(),
+                    result.orderStatus() + ": " + result.failureReason());
+            return persisted;
         }
 
         order.setAcceptedAt(now);

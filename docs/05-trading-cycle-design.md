@@ -47,11 +47,17 @@
 
 ### 3.2 직렬 실행 보장
 
-- 인스턴스별 직렬성은 Redis 락으로 보장한다.
-- 락은 사이클 시작 시 1회 획득 시도한다.
-- 락 TTL은 2분이다.
-- 락 획득 실패 시 해당 주기는 스킵한다.
-- 워커 비정상 종료 시 락은 TTL 만료로 정리한다.
+- 인스턴스별 직렬성은 `scheduled_tasks` 테이블의 `(task_name, task_instance)` 프라이머리 키와 `picked` 플래그로 보장한다. 외부 락(Redis 등)은 사용하지 않는다.
+- `task_instance = strategyInstanceId` 매핑이라 같은 인스턴스의 row는 정확히 1개만 존재하며, 한 워커가 잡으면 `picked=true`로 마킹되어 다른 워커가 폴링 쿼리에서 못 잡는다.
+- 사이클이 자기 `cycleMinutes`보다 오래 걸리면 db-scheduler의 `FixedDelay` 의미상 다음 실행이 자연스럽게 미뤄진다(catch-up 없음).
+- 워커 비정상 종료 시 `picked=true`로 남은 row는 `last_heartbeat` stale 감지로 회수된다.
+
+### 3.3 스케줄 등록과 해제
+
+- 인스턴스 등록 주체는 **상태 기반 reconciler**다. 트레이딩 워커가 1분 주기로 `strategy_instance.lifecycle_state` 와 `scheduled_tasks`를 비교해 동기화한다.
+  - `active` ∧ `auto_paused=null` 인스턴스 중 `scheduled_tasks`에 없는 것 → `scheduleIfNotExists`
+  - `scheduled_tasks`에 있으나 위 조건을 만족하지 않는 인스턴스 → `cancel`
+- web-app은 lifecycle 변경 시 DB 컬럼만 갱신하면 충분하다. trading-worker로의 직접 이벤트 전파는 없다(state-based, 분산 시스템 표준 패턴).
 
 ## 4. 사이클 상태 요약
 
@@ -76,21 +82,20 @@
 
 한 번의 정상 사이클은 아래 순서를 따른다.
 
-1. 스케줄 시각 도래
-2. Redis 락 획득 시도
-3. `active` / `auto_paused` / 실행 시간대 재확인
-4. `trade_cycle_log(READY)` 생성
-5. `live`면 `RECONCILE_PENDING`
-6. 판단 시점 설정값 고정
-7. `INPUT_LOADING`
-8. `LLM_CALLING`
-9. `DECISION_VALIDATING`
-10. 판단 로그 생성
-11. `ORDER_PLANNING`
-12. `paper` 또는 `live` 주문 실행(`ORDER_EXECUTING`)
-13. 포트폴리오 현재 상태 갱신(`PORTFOLIO_UPDATING`)
-14. 비용 알림 후처리
-15. `COMPLETED` 또는 `FAILED`로 종료
+1. db-scheduler가 `scheduled_tasks.execution_time` 도래한 row를 `FOR UPDATE SKIP LOCKED`로 pick (이게 곧 직렬성 보장)
+2. `active` / `auto_paused` / 실행 시간대 재확인
+3. `trade_cycle_log(READY)` 생성
+4. `live`면 `RECONCILE_PENDING`
+5. 판단 시점 설정값 고정
+6. `INPUT_LOADING`
+7. `LLM_CALLING`
+8. `DECISION_VALIDATING`
+9. 판단 로그 생성
+10. `ORDER_PLANNING`
+11. `paper` 또는 `live` 주문 실행(`ORDER_EXECUTING`)
+12. 포트폴리오 현재 상태 갱신(`PORTFOLIO_UPDATING`)
+13. 비용 알림 후처리
+14. `COMPLETED` 또는 `FAILED`로 종료
 
 ### 5.2 판단 시점 설정값 고정
 
@@ -335,11 +340,11 @@ reconcile은 브로커의 실제 주문 상태와 내부 주문 상태를 맞추
 
 다음 경우 해당 주기는 시작하지 않고 스킵한다.
 
-- Redis 락 획득 실패
-- 이전 사이클이 아직 진행 중
 - `auto_paused_reason != null`
 - 인스턴스가 더 이상 `active`가 아님
 - 실행 가능 시간대가 아님
+
+직전 사이클이 자기 주기보다 길어진 경우는 db-scheduler `FixedDelay` 의미상 다음 실행 시각이 자연스럽게 미뤄지므로 별도 스킵 규칙은 없다.
 
 ### 14.2 표시 규칙
 
@@ -388,7 +393,7 @@ reconcile은 브로커의 실제 주문 상태와 내부 주문 상태를 맞추
 
 구현 완료 기준:
 
-- 인스턴스별 Redis 락 직렬 실행
+- `scheduled_tasks` 프라이머리 키 기반 인스턴스별 직렬 실행 (db-scheduler)
 - `trade_cycle_log` 생성과 단계 갱신
 - `paper` 전체 사이클 완성
 - `live` reconcile 선행 정책 반영
