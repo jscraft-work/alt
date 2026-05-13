@@ -60,7 +60,6 @@ public class StrategyInstanceService {
     private static final String ACTION_WATCHLIST_ASSET_ADDED = "STRATEGY_INSTANCE_WATCHLIST_ASSET_ADDED";
     private static final String ACTION_WATCHLIST_ASSET_REMOVED = "STRATEGY_INSTANCE_WATCHLIST_ASSET_REMOVED";
     private static final String EXECUTION_MODE_LIVE = "live";
-    private static final String INPUT_SCOPE_FULL_WATCHLIST = "full_watchlist";
     private static final String LIFECYCLE_ACTIVE = "active";
     private static final String LIFECYCLE_DRAFT = "draft";
     private static final String LIFECYCLE_INACTIVE = "inactive";
@@ -447,15 +446,6 @@ public class StrategyInstanceService {
                 : requestedValue.deepCopy();
     }
 
-    private String resolveInputScope(StrategyInstanceEntity entity) {
-        JsonNode inputSpec = effectiveInputSpec(entity);
-        if (inputSpec == null || inputSpec.isNull()) {
-            return null;
-        }
-        String scope = inputSpec.path("scope").asText(null);
-        return scope == null || scope.isBlank() ? null : scope;
-    }
-
     private LlmModelProfileEntity findTradingModelProfileOverride(UUID requestedModelProfileId) {
         if (requestedModelProfileId == null) {
             return null;
@@ -474,26 +464,6 @@ public class StrategyInstanceService {
         }
         StrategyTemplateEntity template = entity.getStrategyTemplate();
         return template == null ? null : template.getDefaultTradingModelProfile();
-    }
-
-    private JsonNode effectiveInputSpec(StrategyInstanceEntity entity) {
-        JsonNode override = entity.getInputSpecOverrideJson();
-        if (override != null && !override.isNull()) {
-            return override.deepCopy();
-        }
-        StrategyTemplateEntity template = entity.getStrategyTemplate();
-        JsonNode defaultValue = template == null ? null : template.getDefaultInputSpecJson();
-        return defaultValue == null ? null : defaultValue.deepCopy();
-    }
-
-    private JsonNode effectiveExecutionConfig(StrategyInstanceEntity entity) {
-        JsonNode override = entity.getExecutionConfigOverrideJson();
-        if (override != null && !override.isNull()) {
-            return override.deepCopy();
-        }
-        StrategyTemplateEntity template = entity.getStrategyTemplate();
-        JsonNode defaultValue = template == null ? null : template.getDefaultExecutionConfigJson();
-        return defaultValue == null ? null : defaultValue.deepCopy();
     }
 
     private String validateName(String name) {

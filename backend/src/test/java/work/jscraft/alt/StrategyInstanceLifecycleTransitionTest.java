@@ -18,6 +18,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class StrategyInstanceLifecycleTransitionTest extends AdminCatalogApiIntegrationTestSupport {
 
+    private static final String ACTIVATABLE_PROMPT = """
+            ---
+            sources:
+              - {type: minute_bar}
+            scope: held_only
+            ---
+            <system>Lifecycle test prompt.</system>
+            """;
+
     @BeforeEach
     void setUp() {
         resetAdminCatalogState();
@@ -28,7 +37,7 @@ class StrategyInstanceLifecycleTransitionTest extends AdminCatalogApiIntegration
     void draftActiveInactiveTransitionsAreAllowed() throws Exception {
         LoginCookies adminLogin = login();
         LlmModelProfileEntity modelProfile = createTradingModelProfile();
-        StrategyTemplateEntity template = createStrategyTemplate("Lifecycle Template", "template prompt", modelProfile);
+        StrategyTemplateEntity template = createStrategyTemplate("Lifecycle Template", ACTIVATABLE_PROMPT, modelProfile);
         JsonNode created = createDraftInstance(adminLogin, template);
 
         String strategyInstanceId = created.path("id").asText();

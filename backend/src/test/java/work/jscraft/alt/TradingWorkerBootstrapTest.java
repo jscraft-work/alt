@@ -18,7 +18,9 @@ import work.jscraft.alt.trading.application.cycle.TradeCycleLifecycle;
 import work.jscraft.alt.trading.application.cycle.TradingCycleReconciler;
 import work.jscraft.alt.trading.application.cycle.TradingCycleSchedulerConfig;
 import work.jscraft.alt.trading.application.cycle.TradingWindowPolicy;
-import work.jscraft.alt.trading.application.inputspec.InputAssembler;
+import work.jscraft.alt.trading.application.inputspec.PromptContextAssembler;
+import work.jscraft.alt.trading.application.inputspec.PromptInputSpecParser;
+import work.jscraft.alt.trading.application.inputspec.PromptTemplateEngine;
 import work.jscraft.alt.trading.infrastructure.TradingSchedulingConfiguration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,7 +49,9 @@ class TradingWorkerBootstrapTest {
         assertThat(applicationContext.getBean(TradeCycleLifecycle.class)).isNotNull();
         assertThat(applicationContext.getBean(SettingsSnapshotProvider.class)).isNotNull();
         assertThat(applicationContext.getBean(CycleExecutionOrchestrator.class)).isNotNull();
-        assertThat(applicationContext.getBean(InputAssembler.class)).isNotNull();
+        assertThat(applicationContext.getBean(PromptInputSpecParser.class)).isNotNull();
+        assertThat(applicationContext.getBean(PromptContextAssembler.class)).isNotNull();
+        assertThat(applicationContext.getBean(PromptTemplateEngine.class)).isNotNull();
         assertThat(applicationContext.getBean(TradingCycleSchedulerConfig.class)).isNotNull();
         assertThat(applicationContext.getBean(TradingCycleReconciler.class)).isNotNull();
         assertThat(applicationContext.getBean(SchedulerClient.class)).isNotNull();

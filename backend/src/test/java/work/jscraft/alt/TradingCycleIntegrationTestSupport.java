@@ -10,6 +10,24 @@ import work.jscraft.alt.strategy.infrastructure.persistence.StrategyTemplateEnti
 
 abstract class TradingCycleIntegrationTestSupport extends CollectorIntegrationTestSupport {
 
+    /**
+     * 최소 유효 prompt: 사이클이 {@code PromptInputSpecParser → PromptContextAssembler → PromptTemplateEngine}을
+     * 통과하는데 필요한 frontmatter만 둔다. LLM 응답은 fake가 결정하므로 본문은 자리표시자로 충분.
+     */
+    protected static final String DEFAULT_CYCLE_PROMPT = """
+            ---
+            sources:
+              - {type: minute_bar}
+              - {type: fundamental}
+            scope: full_watchlist
+            ---
+            <system>Test prompt.</system>
+            {% for s in stocks %}
+            <stock code="{{ s.code }}">{{ s.minute_bars }}</stock>
+            {% endfor %}
+            응답: {"cycleStatus":"HOLD","summary":"test","orders":[]}
+            """;
+
     protected StrategyInstanceEntity createActiveInstance(String name, String executionMode) {
         return createInstanceWithState(name, executionMode, "active", null);
     }
@@ -20,7 +38,7 @@ abstract class TradingCycleIntegrationTestSupport extends CollectorIntegrationTe
             String lifecycleState,
             String autoPausedReason) {
         LlmModelProfileEntity modelProfile = createTradingModelProfile();
-        StrategyTemplateEntity template = createStrategyTemplate(name + "-template", "prompt v1", modelProfile);
+        StrategyTemplateEntity template = createStrategyTemplate(name + "-template", DEFAULT_CYCLE_PROMPT, modelProfile);
 
         StrategyInstanceEntity instance = new StrategyInstanceEntity();
         instance.setStrategyTemplate(template);
@@ -38,7 +56,7 @@ abstract class TradingCycleIntegrationTestSupport extends CollectorIntegrationTe
         StrategyInstancePromptVersionEntity promptVersion = new StrategyInstancePromptVersionEntity();
         promptVersion.setStrategyInstance(instance);
         promptVersion.setVersionNo(1);
-        promptVersion.setPromptText("prompt v1");
+        promptVersion.setPromptText(DEFAULT_CYCLE_PROMPT);
         promptVersion.setChangeNote("init");
         promptVersion = strategyInstancePromptVersionRepository.saveAndFlush(promptVersion);
 

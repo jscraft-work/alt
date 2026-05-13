@@ -42,11 +42,12 @@ class SettingsSnapshotFreezeTest extends TradingCycleIntegrationTestSupport {
         SettingsSnapshot first = snapshotProvider.capture(instance.getId());
 
         assertThat(first.promptVersionId()).isEqualTo(v1.getId());
-        assertThat(first.promptText()).isEqualTo("prompt v1");
+        assertThat(first.promptText()).isEqualTo(DEFAULT_CYCLE_PROMPT);
         assertThat(first.watchlistSymbols()).containsExactly("005930");
 
         // 사이클 시작 후 인스턴스 설정 변경
-        StrategyInstancePromptVersionEntity v2 = addPromptVersion(instance, 2, "prompt v2", "tweak");
+        String v2PromptText = DEFAULT_CYCLE_PROMPT + "\n<!-- v2 tweak -->";
+        StrategyInstancePromptVersionEntity v2 = addPromptVersion(instance, 2, v2PromptText, "tweak");
         instance.setCurrentPromptVersion(v2);
         ObjectNode newConfig = objectMapper.createObjectNode();
         newConfig.put("slippageBps", 99);
@@ -58,7 +59,7 @@ class SettingsSnapshotFreezeTest extends TradingCycleIntegrationTestSupport {
 
         // 첫 스냅샷은 그대로 유지되어야 한다 (record는 immutable)
         assertThat(first.promptVersionId()).isEqualTo(v1.getId());
-        assertThat(first.promptText()).isEqualTo("prompt v1");
+        assertThat(first.promptText()).isEqualTo(DEFAULT_CYCLE_PROMPT);
         assertThat(first.watchlistSymbols()).containsExactly("005930");
         if (first.executionConfig() != null && first.executionConfig().has("slippageBps")) {
             assertThat(first.executionConfig().path("slippageBps").asInt()).isEqualTo(5);
@@ -67,7 +68,7 @@ class SettingsSnapshotFreezeTest extends TradingCycleIntegrationTestSupport {
         // 두 번째 스냅샷은 변경된 값을 반영
         SettingsSnapshot second = snapshotProvider.capture(instance.getId());
         assertThat(second.promptVersionId()).isEqualTo(v2.getId());
-        assertThat(second.promptText()).isEqualTo("prompt v2");
+        assertThat(second.promptText()).isEqualTo(v2PromptText);
         assertThat(second.watchlistSymbols()).containsExactlyInAnyOrder("005930", "000660");
         assertThat(second.executionConfig().path("slippageBps").asInt()).isEqualTo(99);
     }

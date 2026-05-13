@@ -19,6 +19,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class LiveBrokerAccountExclusivityTest extends AdminCatalogApiIntegrationTestSupport {
 
+    private static final String ACTIVATABLE_PROMPT = """
+            ---
+            sources:
+              - {type: minute_bar}
+            scope: held_only
+            ---
+            <system>Live exclusivity test prompt.</system>
+            """;
+
     @BeforeEach
     void setUp() {
         resetAdminCatalogState();
@@ -29,7 +38,7 @@ class LiveBrokerAccountExclusivityTest extends AdminCatalogApiIntegrationTestSup
     void sameBrokerAccountCannotBeSharedByMultipleActiveLiveInstances() throws Exception {
         LoginCookies adminLogin = login();
         LlmModelProfileEntity modelProfile = createTradingModelProfile();
-        StrategyTemplateEntity template = createStrategyTemplate("Live Template", "template prompt", modelProfile);
+        StrategyTemplateEntity template = createStrategyTemplate("Live Template", ACTIVATABLE_PROMPT, modelProfile);
         BrokerAccountEntity brokerAccount = createBrokerAccount("KIS", "111122223333", "1111-****-3333");
 
         JsonNode firstInstance = createLiveInstance(adminLogin, template, brokerAccount, "KR 모멘텀 LIVE A");
