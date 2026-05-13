@@ -64,6 +64,7 @@ class TradeDecisionLogPersistenceTest extends TradingCycleIntegrationTestSupport
                 "EXECUTE",
                 "매수",
                 new BigDecimal("0.7000"),
+                null,
                 List.of(new ParsedOrder(1, "005930", "BUY", new BigDecimal("5"),
                         "LIMIT", new BigDecimal("81000"), "근거", objectMapper.createArrayNode())));
 

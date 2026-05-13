@@ -54,6 +54,11 @@ public class TradeDecisionLogService {
         log.setCycleStatus(decision.cycleStatus());
         log.setSummary(decision.summary());
         log.setConfidence(decision.confidence());
+        if (decision.boxEstimate() != null) {
+            log.setBoxLow(decision.boxEstimate().low());
+            log.setBoxHigh(decision.boxEstimate().high());
+            log.setBoxConfidence(decision.boxEstimate().confidence());
+        }
         return tradeDecisionLogRepository.saveAndFlush(log);
     }
 

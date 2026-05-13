@@ -95,12 +95,12 @@ public class PromptVocabularyProvider {
                                 "과거 N시간 공시 lookback (생략 시 보내지 않음)"))),
                 new SourceCatalog(
                         "trade_history_days",
-                        "frontmatter에 'trade_history_days: <일>' 형태. 이 strategy_instance + 종목의 trade_order_intent 이력. stocks.trade_history 에 주입.",
+                        "frontmatter에 'trade_history_days: <일>' 형태. 이 strategy_instance의 trade_decision_log를 시간순으로 정렬해, 박스 추정(box_low/high/confidence) + 해당 종목의 trade_order_intent를 한 줄씩 합쳐 stocks.trade_history 에 주입. 박스 추정도 매매도 없는 사이클은 노이즈라 스킵.",
                         List.of(new SourceParameter(
                                 "trade_history_days",
                                 "int",
                                 null,
-                                "과거 N일 매매이력 lookback (생략 시 보내지 않음)"))),
+                                "과거 N일 의사결정/매매 이력 lookback (생략 시 보내지 않음)"))),
                 new SourceCatalog(
                         "macro",
                         "frontmatter에 'macro: true'. 최신 매크로 지수 row. 글로벌 macro 변수에 주입.",

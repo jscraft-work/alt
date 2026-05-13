@@ -43,6 +43,8 @@ import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioRepository
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceRepository;
 import work.jscraft.alt.trading.application.cycle.SettingsSnapshot;
+import work.jscraft.alt.trading.infrastructure.persistence.TradeDecisionLogEntity;
+import work.jscraft.alt.trading.infrastructure.persistence.TradeDecisionLogRepository;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentRepository;
 
@@ -68,6 +70,7 @@ public class PromptContextAssembler {
     private final AssetMasterRepository assetMasterRepository;
     private final StrategyInstanceRepository strategyInstanceRepository;
     private final TradeOrderIntentRepository tradeOrderIntentRepository;
+    private final TradeDecisionLogRepository tradeDecisionLogRepository;
     private final Clock clock;
 
     public PromptContextAssembler(
@@ -83,6 +86,7 @@ public class PromptContextAssembler {
             AssetMasterRepository assetMasterRepository,
             StrategyInstanceRepository strategyInstanceRepository,
             TradeOrderIntentRepository tradeOrderIntentRepository,
+            TradeDecisionLogRepository tradeDecisionLogRepository,
             Clock clock) {
         this.portfolioRepository = portfolioRepository;
         this.portfolioPositionRepository = portfolioPositionRepository;
@@ -96,6 +100,7 @@ public class PromptContextAssembler {
         this.assetMasterRepository = assetMasterRepository;
         this.strategyInstanceRepository = strategyInstanceRepository;
         this.tradeOrderIntentRepository = tradeOrderIntentRepository;
+        this.tradeDecisionLogRepository = tradeDecisionLogRepository;
         this.clock = clock;
     }
 
@@ -321,22 +326,65 @@ public class PromptContextAssembler {
             UUID strategyInstanceId, String symbolCode,
             OffsetDateTime capturedAt, int lookbackDays) {
         OffsetDateTime since = capturedAt.minusDays(lookbackDays);
+        List<TradeDecisionLogEntity> decisions = tradeDecisionLogRepository
+                .findRecentByStrategy(strategyInstanceId, since);
+        if (decisions.isEmpty()) return "";
+
+        // 같은 인스턴스+종목의 매매 의도를 cycle log 별로 묶어 둔다.
         List<TradeOrderIntentEntity> intents = tradeOrderIntentRepository
                 .findRecentByStrategyAndSymbol(strategyInstanceId, symbolCode, since);
-        if (intents.isEmpty()) return "";
-        StringBuilder sb = new StringBuilder();
+        java.util.Map<UUID, java.util.List<TradeOrderIntentEntity>> intentsByDecisionLog =
+                new java.util.HashMap<>();
         for (TradeOrderIntentEntity i : intents) {
-            OffsetDateTime when = i.getTradeDecisionLog() != null
-                    ? i.getTradeDecisionLog().getCycleStartedAt()
-                    : null;
+            TradeDecisionLogEntity dl = i.getTradeDecisionLog();
+            if (dl == null) continue;
+            intentsByDecisionLog
+                    .computeIfAbsent(dl.getId(), k -> new ArrayList<>())
+                    .add(i);
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (TradeDecisionLogEntity d : decisions) {
+            String line = formatHistoryLine(d, intentsByDecisionLog.get(d.getId()));
+            if (line.isEmpty()) continue;
             if (sb.length() > 0) sb.append('\n');
-            sb.append('[').append(when != null ? when.atZoneSameInstant(KST).format(YMD_HM) : "").append(']')
-                    .append(' ').append(i.getSide())
-                    .append(" qty=").append(stripTrailingZeros(i.getQuantity()))
-                    .append(" price=").append(stripTrailingZeros(i.getPrice()));
-            String reason = i.getExecutionBlockedReason();
-            if (reason != null && !reason.isBlank()) {
-                sb.append(" blocked=").append(reason);
+            sb.append(line);
+        }
+        return sb.toString();
+    }
+
+    private String formatHistoryLine(
+            TradeDecisionLogEntity d,
+            List<TradeOrderIntentEntity> intentsForThisCycle) {
+        boolean hasBox = d.getBoxLow() != null || d.getBoxHigh() != null;
+        boolean hasIntent = intentsForThisCycle != null && !intentsForThisCycle.isEmpty();
+        if (!hasBox && !hasIntent) {
+            // 이 종목과 무관하고 박스 추정도 없으면 노이즈라 스킵.
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append('[')
+                .append(d.getCycleStartedAt().atZoneSameInstant(KST).format(YMD_HM))
+                .append("] ")
+                .append(safe(d.getCycleStatus()));
+        if (hasBox) {
+            sb.append(" box=")
+                    .append(stripTrailingZeros(d.getBoxLow()))
+                    .append('~')
+                    .append(stripTrailingZeros(d.getBoxHigh()));
+            if (d.getBoxConfidence() != null) {
+                sb.append(" conf=").append(stripTrailingZeros(d.getBoxConfidence()));
+            }
+        }
+        if (hasIntent) {
+            for (TradeOrderIntentEntity i : intentsForThisCycle) {
+                sb.append(" | ").append(i.getSide())
+                        .append(" qty=").append(stripTrailingZeros(i.getQuantity()))
+                        .append(" price=").append(stripTrailingZeros(i.getPrice()));
+                String reason = i.getExecutionBlockedReason();
+                if (reason != null && !reason.isBlank()) {
+                    sb.append(" blocked=").append(reason);
+                }
             }
         }
         return sb.toString();

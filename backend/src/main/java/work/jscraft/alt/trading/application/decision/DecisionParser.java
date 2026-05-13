@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.stereotype.Component;
 
+import work.jscraft.alt.trading.application.decision.ParsedDecision.BoxEstimate;
 import work.jscraft.alt.trading.application.decision.ParsedDecision.ParsedOrder;
 
 @Component
@@ -58,6 +59,7 @@ public class DecisionParser {
         BigDecimal confidence = root.has("confidence") && !root.get("confidence").isNull()
                 ? new BigDecimal(root.get("confidence").asText())
                 : null;
+        BoxEstimate boxEstimate = parseBoxEstimate(root);
 
         List<ParsedOrder> orders = parseOrders(root);
 
@@ -72,7 +74,40 @@ public class DecisionParser {
                     "EXECUTE인데 orders가 비어 있습니다.");
         }
 
-        return new ParsedDecision(cycleStatus, summary, confidence, orders);
+        return new ParsedDecision(cycleStatus, summary, confidence, boxEstimate, orders);
+    }
+
+    private BoxEstimate parseBoxEstimate(JsonNode root) {
+        JsonNode node = root.path("boxEstimate");
+        if (node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        if (!node.isObject()) {
+            throw new DecisionParseException(
+                    DecisionParseException.Reason.INVALID_JSON,
+                    "boxEstimate는 객체여야 합니다.");
+        }
+        BigDecimal low = readOptionalDecimal(node, "low");
+        BigDecimal high = readOptionalDecimal(node, "high");
+        BigDecimal confidence = readOptionalDecimal(node, "confidence");
+        if (low == null && high == null && confidence == null) {
+            return null;
+        }
+        return new BoxEstimate(low, high, confidence);
+    }
+
+    private BigDecimal readOptionalDecimal(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value.asText());
+        } catch (NumberFormatException ex) {
+            throw new DecisionParseException(
+                    DecisionParseException.Reason.INVALID_JSON,
+                    "boxEstimate." + field + " 숫자 형식 오류");
+        }
     }
 
     private List<ParsedOrder> parseOrders(JsonNode root) {

@@ -71,6 +71,7 @@ class OrderIntentSafetyValidationTest extends TradingCycleIntegrationTestSupport
                 "EXECUTE",
                 "검증 케이스",
                 new BigDecimal("0.5"),
+                null,
                 List.of(
                         // 1. 수량 0 → blocked
                         new ParsedOrder(1, "005930", "BUY", new BigDecimal("0"),

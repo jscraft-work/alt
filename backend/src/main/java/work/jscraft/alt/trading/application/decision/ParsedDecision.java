@@ -9,6 +9,7 @@ public record ParsedDecision(
         String cycleStatus,
         String summary,
         BigDecimal confidence,
+        BoxEstimate boxEstimate,
         List<ParsedOrder> orders) {
 
     public record ParsedOrder(
@@ -20,5 +21,11 @@ public record ParsedDecision(
             BigDecimal price,
             String rationale,
             JsonNode evidence) {
+    }
+
+    public record BoxEstimate(
+            BigDecimal low,
+            BigDecimal high,
+            BigDecimal confidence) {
     }
 }

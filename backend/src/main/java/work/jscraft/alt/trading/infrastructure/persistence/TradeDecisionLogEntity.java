@@ -99,6 +99,15 @@ public class TradeDecisionLogEntity extends CreatedAtOnlyUuidEntity {
     @Column(name = "call_status", length = 30)
     private String callStatus;
 
+    @Column(name = "box_low", precision = 19, scale = 8)
+    private BigDecimal boxLow;
+
+    @Column(name = "box_high", precision = 19, scale = 8)
+    private BigDecimal boxHigh;
+
+    @Column(name = "box_confidence", precision = 5, scale = 4)
+    private BigDecimal boxConfidence;
+
     public TradeCycleLogEntity getTradeCycleLog() {
         return tradeCycleLog;
     }
@@ -289,5 +298,29 @@ public class TradeDecisionLogEntity extends CreatedAtOnlyUuidEntity {
 
     public void setCallStatus(String callStatus) {
         this.callStatus = callStatus;
+    }
+
+    public BigDecimal getBoxLow() {
+        return boxLow;
+    }
+
+    public void setBoxLow(BigDecimal boxLow) {
+        this.boxLow = boxLow;
+    }
+
+    public BigDecimal getBoxHigh() {
+        return boxHigh;
+    }
+
+    public void setBoxHigh(BigDecimal boxHigh) {
+        this.boxHigh = boxHigh;
+    }
+
+    public BigDecimal getBoxConfidence() {
+        return boxConfidence;
+    }
+
+    public void setBoxConfidence(BigDecimal boxConfidence) {
+        this.boxConfidence = boxConfidence;
     }
 }

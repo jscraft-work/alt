@@ -35,7 +35,7 @@ class TradingSchemaFlywayTest {
                     .locations("classpath:db/migration")
                     .load();
 
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(10);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(11);
 
             try (Connection connection = DriverManager.getConnection(
                     jdbcUrl(databaseName),
@@ -44,7 +44,7 @@ class TradingSchemaFlywayTest {
                  Statement statement = connection.createStatement()) {
 
                 assertThat(singleInt(statement, "select count(*) from flyway_schema_history where success = true"))
-                        .isEqualTo(10);
+                        .isEqualTo(11);
                 assertThat(regclass(statement, "strategy_instance")).isEqualTo("strategy_instance");
                 assertThat(regclass(statement, "strategy_instance_prompt_version"))
                         .isEqualTo("strategy_instance_prompt_version");
