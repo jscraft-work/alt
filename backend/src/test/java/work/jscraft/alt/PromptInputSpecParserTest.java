@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import work.jscraft.alt.trading.application.inputspec.PromptInputSpec;
 import work.jscraft.alt.trading.application.inputspec.PromptInputSpec.Scope;
-import work.jscraft.alt.trading.application.inputspec.PromptInputSpec.SourceSpec;
 import work.jscraft.alt.trading.application.inputspec.PromptInputSpecException;
 import work.jscraft.alt.trading.application.inputspec.PromptInputSpecParser;
 
@@ -16,13 +15,17 @@ class PromptInputSpecParserTest {
     private final PromptInputSpecParser parser = new PromptInputSpecParser();
 
     @Test
-    void parsesSourcesAndScopeAndBody() {
+    void parsesAllKeysAndBody() {
         String prompt = """
                 ---
-                sources:
-                  - {type: minute_bar, lookback_minutes: 120}
-                  - {type: fundamental}
-                  - {type: news, lookback_hours: 12}
+                minute_bars: 120
+                daily_bars: 30
+                news_hours: 12
+                disclosure_hours: 24
+                trade_history_days: 30
+                fundamental: true
+                macro: false
+                orderbook: false
                 scope: full_watchlist
                 ---
                 <system>You are a trader.</system>
@@ -33,33 +36,47 @@ class PromptInputSpecParserTest {
 
         PromptInputSpec spec = parser.parse(prompt);
 
+        assertThat(spec.minuteBars()).isEqualTo(120);
+        assertThat(spec.dailyBars()).isEqualTo(30);
+        assertThat(spec.newsHours()).isEqualTo(12);
+        assertThat(spec.disclosureHours()).isEqualTo(24);
+        assertThat(spec.tradeHistoryDays()).isEqualTo(30);
+        assertThat(spec.fundamental()).isTrue();
+        assertThat(spec.macro()).isFalse();
+        assertThat(spec.orderbook()).isFalse();
         assertThat(spec.scope()).isEqualTo(Scope.FULL_WATCHLIST);
-        assertThat(spec.sources()).hasSize(3);
-        assertThat(spec.sources().get(0)).isInstanceOf(SourceSpec.MinuteBar.class);
-        assertThat(((SourceSpec.MinuteBar) spec.sources().get(0)).lookbackMinutes()).isEqualTo(120);
-        assertThat(spec.sources().get(1)).isInstanceOf(SourceSpec.Fundamental.class);
-        assertThat(((SourceSpec.News) spec.sources().get(2)).lookbackHours()).isEqualTo(12);
         assertThat(spec.body()).contains("{% for s in stocks %}");
         assertThat(spec.body()).doesNotContain("---");
     }
 
     @Test
-    void defaultsLookbackWhenOmitted() {
+    void omittedKeysBecomeNullOrFalse() {
         String prompt = """
                 ---
-                sources:
-                  - {type: minute_bar}
-                  - {type: news}
-                  - {type: disclosure}
+                minute_bars: 60
                 ---
                 body
                 """;
 
         PromptInputSpec spec = parser.parse(prompt);
 
-        assertThat(((SourceSpec.MinuteBar) spec.sources().get(0)).lookbackMinutes()).isEqualTo(60);
-        assertThat(((SourceSpec.News) spec.sources().get(1)).lookbackHours()).isEqualTo(12);
-        assertThat(((SourceSpec.Disclosure) spec.sources().get(2)).lookbackHours()).isEqualTo(24);
+        assertThat(spec.minuteBars()).isEqualTo(60);
+        assertThat(spec.dailyBars()).isNull();
+        assertThat(spec.newsHours()).isNull();
+        assertThat(spec.disclosureHours()).isNull();
+        assertThat(spec.tradeHistoryDays()).isNull();
+        assertThat(spec.fundamental()).isFalse();
+        assertThat(spec.macro()).isFalse();
+        assertThat(spec.orderbook()).isFalse();
+        assertThat(spec.scope()).isEqualTo(Scope.FULL_WATCHLIST);
+    }
+
+    @Test
+    void emptyFrontmatterDefaultsAllNullOrFalse() {
+        String prompt = "---\n---\nbody";
+        PromptInputSpec spec = parser.parse(prompt);
+        assertThat(spec.minuteBars()).isNull();
+        assertThat(spec.fundamental()).isFalse();
         assertThat(spec.scope()).isEqualTo(Scope.FULL_WATCHLIST);
     }
 
@@ -72,21 +89,23 @@ class PromptInputSpecParserTest {
 
     @Test
     void rejectsMissingClosingDelimiter() {
-        assertThatThrownBy(() -> parser.parse("---\nsources: []\nbody without close"))
+        assertThatThrownBy(() -> parser.parse("---\nminute_bars: 60\nbody without close"))
                 .isInstanceOf(PromptInputSpecException.class)
                 .hasMessageContaining("종료");
     }
 
     @Test
-    void rejectsEmptySources() {
-        assertThatThrownBy(() -> parser.parse("---\nsources: []\n---\nbody"))
-                .isInstanceOf(PromptInputSpecException.class);
+    void rejectsNonIntegerLookback() {
+        assertThatThrownBy(() -> parser.parse(
+                "---\nminute_bars: hello\n---\nbody"))
+                .isInstanceOf(PromptInputSpecException.class)
+                .hasMessageContaining("minute_bars");
     }
 
     @Test
-    void rejectsUnknownSourceType() {
+    void rejectsUnknownScope() {
         assertThatThrownBy(() -> parser.parse(
-                "---\nsources:\n  - {type: foobar}\n---\nbody"))
+                "---\nscope: nope\n---\nbody"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

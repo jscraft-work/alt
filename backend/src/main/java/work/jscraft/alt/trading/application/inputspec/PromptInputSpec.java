@@ -1,83 +1,35 @@
 package work.jscraft.alt.trading.application.inputspec;
 
-import java.util.List;
-
 /**
- * YAML frontmatter로 prompt 상단에 선언되는 입력 스펙.
+ * Prompt 상단의 YAML frontmatter를 표현하는 record.
  *
  * 예:
  * <pre>
  * ---
- * sources:
- *   - {type: minute_bar, lookback_minutes: 120}
- *   - {type: fundamental}
- *   - {type: news, lookback_hours: 12}
- * scope: full_watchlist
+ * minute_bars: 60          # 최근 60분 분봉 (null/생략이면 보내지 않음)
+ * daily_bars: 30           # 최근 30일 일봉
+ * news_hours: 24           # 최근 24시간 뉴스
+ * disclosure_hours: 24
+ * trade_history_days: 30   # 이 인스턴스 + 종목의 최근 30일 매매이력
+ * fundamental: true        # 펀더멘털 1행 첨부
+ * macro: false
+ * orderbook: false
+ * scope: full_watchlist    # held_only | full_watchlist (기본)
  * ---
  * (Pebble 본문...)
  * </pre>
  */
 public record PromptInputSpec(
-        List<SourceSpec> sources,
+        Integer minuteBars,
+        Integer dailyBars,
+        Integer newsHours,
+        Integer disclosureHours,
+        Integer tradeHistoryDays,
+        boolean fundamental,
+        boolean macro,
+        boolean orderbook,
         Scope scope,
-        String body
-) {
-
-    public boolean usesSource(SourceSpec.Type type) {
-        return sources.stream().anyMatch(s -> s.type() == type);
-    }
-
-    public sealed interface SourceSpec permits SourceSpec.MinuteBar, SourceSpec.Fundamental,
-            SourceSpec.News, SourceSpec.Disclosure, SourceSpec.Macro, SourceSpec.Orderbook {
-
-        Type type();
-
-        enum Type {
-            MINUTE_BAR("minute_bar"),
-            FUNDAMENTAL("fundamental"),
-            NEWS("news"),
-            DISCLOSURE("disclosure"),
-            MACRO("macro"),
-            ORDERBOOK("orderbook");
-
-            private final String wireKey;
-
-            Type(String wireKey) { this.wireKey = wireKey; }
-
-            public String wireKey() { return wireKey; }
-
-            public static Type fromWireKey(String key) {
-                for (Type t : values()) {
-                    if (t.wireKey.equals(key)) return t;
-                }
-                throw new IllegalArgumentException("알 수 없는 source type: " + key);
-            }
-        }
-
-        record MinuteBar(int lookbackMinutes) implements SourceSpec {
-            @Override public Type type() { return Type.MINUTE_BAR; }
-        }
-
-        record Fundamental() implements SourceSpec {
-            @Override public Type type() { return Type.FUNDAMENTAL; }
-        }
-
-        record News(int lookbackHours) implements SourceSpec {
-            @Override public Type type() { return Type.NEWS; }
-        }
-
-        record Disclosure(int lookbackHours) implements SourceSpec {
-            @Override public Type type() { return Type.DISCLOSURE; }
-        }
-
-        record Macro() implements SourceSpec {
-            @Override public Type type() { return Type.MACRO; }
-        }
-
-        record Orderbook() implements SourceSpec {
-            @Override public Type type() { return Type.ORDERBOOK; }
-        }
-    }
+        String body) {
 
     public enum Scope {
         HELD_ONLY("held_only"),
@@ -85,9 +37,13 @@ public record PromptInputSpec(
 
         private final String wireKey;
 
-        Scope(String wireKey) { this.wireKey = wireKey; }
+        Scope(String wireKey) {
+            this.wireKey = wireKey;
+        }
 
-        public String wireKey() { return wireKey; }
+        public String wireKey() {
+            return wireKey;
+        }
 
         public static Scope fromWireKey(String key) {
             for (Scope s : values()) {

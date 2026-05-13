@@ -1,7 +1,6 @@
 package work.jscraft.alt.trading.application.inputspec;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Map;
 
 import org.springframework.stereotype.Component;
@@ -9,7 +8,7 @@ import org.yaml.snakeyaml.Yaml;
 
 /**
  * prompt 상단의 YAML frontmatter (--- ... ---)를 파싱해 {@link PromptInputSpec}으로 변환.
- * frontmatter가 없으면 {@link PromptInputSpecException} 던짐 (활성화 게이트에서 사용).
+ * frontmatter가 없으면 {@link PromptInputSpecException} 던짐.
  */
 @Component
 public class PromptInputSpecParser {
@@ -36,78 +35,61 @@ public class PromptInputSpecParser {
             throw new PromptInputSpecException("YAML frontmatter 종료 '---'를 찾을 수 없습니다.");
         }
 
-        String yamlBlock = String.join("\n", java.util.Arrays.copyOfRange(lines, 1, closeIdx));
-        String body = String.join("\n", java.util.Arrays.copyOfRange(lines, closeIdx + 1, lines.length));
+        String yamlBlock = String.join("\n", Arrays.copyOfRange(lines, 1, closeIdx));
+        String body = String.join("\n", Arrays.copyOfRange(lines, closeIdx + 1, lines.length));
 
         Object raw = new Yaml().load(yamlBlock);
+        if (raw == null) {
+            // 빈 frontmatter 허용 (모두 기본값)
+            return new PromptInputSpec(null, null, null, null, null,
+                    false, false, false, PromptInputSpec.Scope.FULL_WATCHLIST, body);
+        }
         if (!(raw instanceof Map<?, ?> map)) {
             throw new PromptInputSpecException("frontmatter는 YAML 객체여야 합니다.");
         }
 
-        List<PromptInputSpec.SourceSpec> sources = parseSources(map.get("sources"));
+        Integer minuteBars = optInt(map, "minute_bars");
+        Integer dailyBars = optInt(map, "daily_bars");
+        Integer newsHours = optInt(map, "news_hours");
+        Integer disclosureHours = optInt(map, "disclosure_hours");
+        Integer tradeHistoryDays = optInt(map, "trade_history_days");
+        boolean fundamental = optBool(map, "fundamental");
+        boolean macro = optBool(map, "macro");
+        boolean orderbook = optBool(map, "orderbook");
         PromptInputSpec.Scope scope = parseScope(map.get("scope"));
 
-        return new PromptInputSpec(sources, scope, body);
+        return new PromptInputSpec(minuteBars, dailyBars, newsHours, disclosureHours,
+                tradeHistoryDays, fundamental, macro, orderbook, scope, body);
     }
 
-    @SuppressWarnings("unchecked")
-    private List<PromptInputSpec.SourceSpec> parseSources(Object raw) {
-        if (raw == null) {
-            throw new PromptInputSpecException("frontmatter에 'sources'가 없습니다.");
-        }
-        if (!(raw instanceof List<?> list)) {
-            throw new PromptInputSpecException("'sources'는 리스트여야 합니다.");
-        }
-        List<PromptInputSpec.SourceSpec> out = new ArrayList<>();
-        for (Object item : list) {
-            if (!(item instanceof Map<?, ?>)) {
-                throw new PromptInputSpecException("'sources' 항목은 객체여야 합니다: " + item);
-            }
-            Map<String, Object> m = (Map<String, Object>) item;
-            Object typeRaw = m.get("type");
-            if (!(typeRaw instanceof String typeKey)) {
-                throw new PromptInputSpecException("'sources[].type'은 문자열이어야 합니다.");
-            }
-            out.add(buildSource(PromptInputSpec.SourceSpec.Type.fromWireKey(typeKey), m));
-        }
-        if (out.isEmpty()) {
-            throw new PromptInputSpecException("'sources'가 비어 있습니다.");
-        }
-        return out;
-    }
-
-    private PromptInputSpec.SourceSpec buildSource(
-            PromptInputSpec.SourceSpec.Type type, Map<String, Object> m) {
-        return switch (type) {
-            case MINUTE_BAR -> new PromptInputSpec.SourceSpec.MinuteBar(
-                    intParam(m, "lookback_minutes", 60));
-            case FUNDAMENTAL -> new PromptInputSpec.SourceSpec.Fundamental();
-            case NEWS -> new PromptInputSpec.SourceSpec.News(
-                    intParam(m, "lookback_hours", 12));
-            case DISCLOSURE -> new PromptInputSpec.SourceSpec.Disclosure(
-                    intParam(m, "lookback_hours", 24));
-            case MACRO -> new PromptInputSpec.SourceSpec.Macro();
-            case ORDERBOOK -> new PromptInputSpec.SourceSpec.Orderbook();
-        };
-    }
-
-    private int intParam(Map<String, Object> m, String key, int defaultValue) {
-        Object v = m.get(key);
-        if (v == null) return defaultValue;
+    private static Integer optInt(Map<?, ?> map, String key) {
+        Object v = map.get(key);
+        if (v == null) return null;
         if (v instanceof Integer i) return i;
         if (v instanceof Long l) return l.intValue();
         if (v instanceof String s) {
-            try { return Integer.parseInt(s); } catch (NumberFormatException e) {
+            try {
+                return Integer.parseInt(s);
+            } catch (NumberFormatException e) {
                 throw new PromptInputSpecException(key + "는 정수여야 합니다: " + s);
             }
         }
         throw new PromptInputSpecException(key + "는 정수여야 합니다: " + v);
     }
 
-    private PromptInputSpec.Scope parseScope(Object raw) {
-        if (raw == null) {
-            return PromptInputSpec.Scope.FULL_WATCHLIST;
+    private static boolean optBool(Map<?, ?> map, String key) {
+        Object v = map.get(key);
+        if (v == null) return false;
+        if (v instanceof Boolean b) return b;
+        if (v instanceof String s) {
+            if ("true".equalsIgnoreCase(s)) return true;
+            if ("false".equalsIgnoreCase(s)) return false;
         }
+        throw new PromptInputSpecException(key + "는 boolean이어야 합니다: " + v);
+    }
+
+    private static PromptInputSpec.Scope parseScope(Object raw) {
+        if (raw == null) return PromptInputSpec.Scope.FULL_WATCHLIST;
         if (!(raw instanceof String s)) {
             throw new PromptInputSpecException("'scope'는 문자열이어야 합니다.");
         }

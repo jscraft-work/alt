@@ -46,36 +46,40 @@ class PromptVocabularyTest {
         assertThat(provider.vocabulary().stocksCollection().name()).isEqualTo("stocks");
         assertThat(fieldNames).contains(
                 "minute_bars",
+                "daily_bars",
                 "fundamental",
                 "news",
                 "disclosures",
-                "orderbook");
+                "orderbook",
+                "trade_history");
     }
 
     @Test
-    void sourcesCatalogIncludesAllSixTypes() {
+    void sourcesCatalogIncludesAllFrontmatterKeys() {
         List<String> sourceTypes = provider.vocabulary().sources().stream()
                 .map(SourceCatalog::type)
                 .toList();
 
         assertThat(sourceTypes).containsExactlyInAnyOrder(
-                "minute_bar",
+                "minute_bars",
+                "daily_bars",
                 "fundamental",
-                "news",
-                "disclosure",
+                "news_hours",
+                "disclosure_hours",
+                "trade_history_days",
                 "macro",
                 "orderbook");
     }
 
     @Test
-    void minuteBarSourceDeclaresLookbackParameter() {
-        SourceCatalog minuteBar = provider.vocabulary().sources().stream()
-                .filter(s -> s.type().equals("minute_bar"))
+    void minuteBarsSourceDeclaresLookbackParameter() {
+        SourceCatalog minuteBars = provider.vocabulary().sources().stream()
+                .filter(s -> s.type().equals("minute_bars"))
                 .findFirst()
                 .orElseThrow();
 
-        SourceParameter parameter = minuteBar.parameters().get(0);
-        assertThat(parameter.name()).isEqualTo("lookback_minutes");
-        assertThat(parameter.defaultValue()).isEqualTo("60");
+        SourceParameter parameter = minuteBars.parameters().get(0);
+        assertThat(parameter.name()).isEqualTo("minute_bars");
+        assertThat(parameter.type()).isEqualTo("int");
     }
 }

@@ -44,8 +44,10 @@ class PromptTemplateEngineTest {
                 {% endfor %}""";
         Map<String, Object> ctx = Map.of(
                 "stocks", List.of(
-                        StockContext.of("005930", "삼성전자", "[14:25] 75100 vol=1200", "PER=11.2", "", "", ""),
-                        StockContext.of("035720", "카카오", "[14:25] 42100 vol=830", "PER=N/A", "", "", "")));
+                        StockContext.of("005930", "삼성전자",
+                                "[14:25] 75100 vol=1200", "", "PER=11.2", "", "", "", ""),
+                        StockContext.of("035720", "카카오",
+                                "[14:25] 42100 vol=830", "", "PER=N/A", "", "", "", "")));
 
         String out = engine.render(body, ctx);
 

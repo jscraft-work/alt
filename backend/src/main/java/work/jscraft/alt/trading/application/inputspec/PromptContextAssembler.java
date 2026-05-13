@@ -2,6 +2,7 @@ package work.jscraft.alt.trading.application.inputspec;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -25,6 +26,8 @@ import work.jscraft.alt.macro.infrastructure.persistence.MacroItemEntity;
 import work.jscraft.alt.macro.infrastructure.persistence.MacroItemRepository;
 import work.jscraft.alt.marketdata.infrastructure.persistence.AssetMasterEntity;
 import work.jscraft.alt.marketdata.infrastructure.persistence.AssetMasterRepository;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketDailyItemEntity;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketDailyItemRepository;
 import work.jscraft.alt.marketdata.infrastructure.persistence.MarketFundamentalItemEntity;
 import work.jscraft.alt.marketdata.infrastructure.persistence.MarketFundamentalItemRepository;
 import work.jscraft.alt.marketdata.infrastructure.persistence.MarketMinuteItemEntity;
@@ -40,6 +43,8 @@ import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioRepository
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceRepository;
 import work.jscraft.alt.trading.application.cycle.SettingsSnapshot;
+import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentEntity;
+import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderIntentRepository;
 
 @Service
 public class PromptContextAssembler {
@@ -54,6 +59,7 @@ public class PromptContextAssembler {
     private final PortfolioRepository portfolioRepository;
     private final PortfolioPositionRepository portfolioPositionRepository;
     private final MarketMinuteItemRepository marketMinuteItemRepository;
+    private final MarketDailyItemRepository marketDailyItemRepository;
     private final MarketFundamentalItemRepository marketFundamentalItemRepository;
     private final NewsItemRepository newsItemRepository;
     private final NewsAssetRelationRepository newsAssetRelationRepository;
@@ -61,12 +67,14 @@ public class PromptContextAssembler {
     private final MacroItemRepository macroItemRepository;
     private final AssetMasterRepository assetMasterRepository;
     private final StrategyInstanceRepository strategyInstanceRepository;
+    private final TradeOrderIntentRepository tradeOrderIntentRepository;
     private final Clock clock;
 
     public PromptContextAssembler(
             PortfolioRepository portfolioRepository,
             PortfolioPositionRepository portfolioPositionRepository,
             MarketMinuteItemRepository marketMinuteItemRepository,
+            MarketDailyItemRepository marketDailyItemRepository,
             MarketFundamentalItemRepository marketFundamentalItemRepository,
             NewsItemRepository newsItemRepository,
             NewsAssetRelationRepository newsAssetRelationRepository,
@@ -74,10 +82,12 @@ public class PromptContextAssembler {
             MacroItemRepository macroItemRepository,
             AssetMasterRepository assetMasterRepository,
             StrategyInstanceRepository strategyInstanceRepository,
+            TradeOrderIntentRepository tradeOrderIntentRepository,
             Clock clock) {
         this.portfolioRepository = portfolioRepository;
         this.portfolioPositionRepository = portfolioPositionRepository;
         this.marketMinuteItemRepository = marketMinuteItemRepository;
+        this.marketDailyItemRepository = marketDailyItemRepository;
         this.marketFundamentalItemRepository = marketFundamentalItemRepository;
         this.newsItemRepository = newsItemRepository;
         this.newsAssetRelationRepository = newsAssetRelationRepository;
@@ -85,6 +95,7 @@ public class PromptContextAssembler {
         this.macroItemRepository = macroItemRepository;
         this.assetMasterRepository = assetMasterRepository;
         this.strategyInstanceRepository = strategyInstanceRepository;
+        this.tradeOrderIntentRepository = tradeOrderIntentRepository;
         this.clock = clock;
     }
 
@@ -103,9 +114,9 @@ public class PromptContextAssembler {
         ctx.put("held_positions", formatHeldPositions(heldPositions));
 
         List<String> targetSymbols = resolveTargetSymbols(snapshot, spec, heldPositions);
-        ctx.put("stocks", buildStocks(targetSymbols, spec, capturedAt));
+        ctx.put("stocks", buildStocks(snapshot, targetSymbols, spec, capturedAt));
 
-        if (spec.usesSource(PromptInputSpec.SourceSpec.Type.MACRO)) {
+        if (spec.macro()) {
             ctx.put("macro", buildMacro(capturedAt));
         }
 
@@ -160,6 +171,7 @@ public class PromptContextAssembler {
     }
 
     private List<Map<String, Object>> buildStocks(
+            SettingsSnapshot snapshot,
             List<String> targetSymbols,
             PromptInputSpec spec,
             OffsetDateTime capturedAt) {
@@ -168,33 +180,32 @@ public class PromptContextAssembler {
             Optional<AssetMasterEntity> assetOpt = assetMasterRepository.findBySymbolCode(symbolCode);
             String name = assetOpt.map(AssetMasterEntity::getSymbolName).orElse("");
 
-            String minuteBars = "";
-            String fundamental = "";
-            String news = "";
-            String disclosures = "";
-            String orderbook = "";
+            String minuteBars = spec.minuteBars() != null
+                    ? buildMinuteBars(symbolCode, capturedAt, spec.minuteBars())
+                    : "";
+            String dailyBars = spec.dailyBars() != null
+                    ? buildDailyBars(symbolCode, capturedAt, spec.dailyBars())
+                    : "";
+            String fundamental = spec.fundamental()
+                    ? buildFundamental(symbolCode)
+                    : "";
+            String news = spec.newsHours() != null
+                    ? buildNews(assetOpt.map(AssetMasterEntity::getId).orElse(null),
+                            capturedAt, spec.newsHours())
+                    : "";
+            String disclosures = spec.disclosureHours() != null
+                    ? buildDisclosures(assetOpt.map(AssetMasterEntity::getDartCorpCode).orElse(null),
+                            capturedAt, spec.disclosureHours())
+                    : "";
+            String orderbook = ""; // KIS WS 활성화되면 채움 — v1 미구현
+            String tradeHistory = spec.tradeHistoryDays() != null
+                    ? buildTradeHistory(snapshot.strategyInstanceId(), symbolCode,
+                            capturedAt, spec.tradeHistoryDays())
+                    : "";
 
-            for (PromptInputSpec.SourceSpec source : spec.sources()) {
-                switch (source) {
-                    case PromptInputSpec.SourceSpec.MinuteBar mb ->
-                            minuteBars = buildMinuteBars(symbolCode, capturedAt, mb.lookbackMinutes());
-                    case PromptInputSpec.SourceSpec.Fundamental f ->
-                            fundamental = buildFundamental(symbolCode);
-                    case PromptInputSpec.SourceSpec.News n ->
-                            news = buildNews(assetOpt.map(AssetMasterEntity::getId).orElse(null),
-                                    capturedAt, n.lookbackHours());
-                    case PromptInputSpec.SourceSpec.Disclosure d ->
-                            disclosures = buildDisclosures(
-                                    assetOpt.map(AssetMasterEntity::getDartCorpCode).orElse(null),
-                                    capturedAt, d.lookbackHours());
-                    case PromptInputSpec.SourceSpec.Orderbook o -> {
-                        // TODO KIS WS 활성화되면 채움 — v1 미구현
-                    }
-                    case PromptInputSpec.SourceSpec.Macro m -> { /* per-stock 아님 */ }
-                }
-            }
-
-            stocks.add(StockContext.of(symbolCode, name, minuteBars, fundamental, news, disclosures, orderbook));
+            stocks.add(StockContext.of(symbolCode, name,
+                    minuteBars, dailyBars, fundamental,
+                    news, disclosures, orderbook, tradeHistory));
         }
         return stocks;
     }
@@ -208,6 +219,24 @@ public class PromptContextAssembler {
         for (MarketMinuteItemEntity b : bars) {
             if (sb.length() > 0) sb.append('\n');
             sb.append('[').append(b.getBarTime().atZoneSameInstant(KST).format(HHMM)).append(']')
+                    .append(" o=").append(stripTrailingZeros(b.getOpenPrice()))
+                    .append(" h=").append(stripTrailingZeros(b.getHighPrice()))
+                    .append(" l=").append(stripTrailingZeros(b.getLowPrice()))
+                    .append(" c=").append(stripTrailingZeros(b.getClosePrice()))
+                    .append(" v=").append(stripTrailingZeros(b.getVolume()));
+        }
+        return sb.toString();
+    }
+
+    private String buildDailyBars(String symbolCode, OffsetDateTime capturedAt, int lookbackDays) {
+        LocalDate from = capturedAt.atZoneSameInstant(KST).toLocalDate().minusDays(lookbackDays);
+        List<MarketDailyItemEntity> bars = marketDailyItemRepository
+                .findBySymbolCodeAndBusinessDateGreaterThanEqualOrderByBusinessDateAsc(symbolCode, from);
+        if (bars.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (MarketDailyItemEntity b : bars) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append('[').append(b.getBusinessDate()).append(']')
                     .append(" o=").append(stripTrailingZeros(b.getOpenPrice()))
                     .append(" h=").append(stripTrailingZeros(b.getHighPrice()))
                     .append(" l=").append(stripTrailingZeros(b.getLowPrice()))
@@ -271,8 +300,6 @@ public class PromptContextAssembler {
     private String buildDisclosures(String dartCorpCode, OffsetDateTime capturedAt, int lookbackHours) {
         if (dartCorpCode == null || dartCorpCode.isBlank()) return "";
         OffsetDateTime since = capturedAt.minusHours(lookbackHours);
-        // TradingInputAssembler.collectDisclosures와 동일 패턴: findAll 후 코드/시점 필터.
-        // 종목별 호출로 N+1이 되지만 v1은 종목 수가 작아 그대로 둠.
         List<DisclosureItemEntity> matches = new ArrayList<>();
         for (DisclosureItemEntity d : disclosureItemRepository.findAll()) {
             if (!dartCorpCode.equals(d.getDartCorpCode())) continue;
@@ -286,6 +313,31 @@ public class PromptContextAssembler {
             if (sb.length() > 0) sb.append('\n');
             sb.append('[').append(d.getPublishedAt().atZoneSameInstant(KST).format(YMD)).append(']')
                     .append(' ').append(emptyIfNull(d.getTitle()));
+        }
+        return sb.toString();
+    }
+
+    private String buildTradeHistory(
+            UUID strategyInstanceId, String symbolCode,
+            OffsetDateTime capturedAt, int lookbackDays) {
+        OffsetDateTime since = capturedAt.minusDays(lookbackDays);
+        List<TradeOrderIntentEntity> intents = tradeOrderIntentRepository
+                .findRecentByStrategyAndSymbol(strategyInstanceId, symbolCode, since);
+        if (intents.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (TradeOrderIntentEntity i : intents) {
+            OffsetDateTime when = i.getTradeDecisionLog() != null
+                    ? i.getTradeDecisionLog().getCycleStartedAt()
+                    : null;
+            if (sb.length() > 0) sb.append('\n');
+            sb.append('[').append(when != null ? when.atZoneSameInstant(KST).format(YMD_HM) : "").append(']')
+                    .append(' ').append(i.getSide())
+                    .append(" qty=").append(stripTrailingZeros(i.getQuantity()))
+                    .append(" price=").append(stripTrailingZeros(i.getPrice()));
+            String reason = i.getExecutionBlockedReason();
+            if (reason != null && !reason.isBlank()) {
+                sb.append(" blocked=").append(reason);
+            }
         }
         return sb.toString();
     }
