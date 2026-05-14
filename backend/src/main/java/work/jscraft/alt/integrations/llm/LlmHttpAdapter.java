@@ -44,6 +44,9 @@ public class LlmHttpAdapter implements TradingDecisionEngine {
     @Autowired
     public LlmHttpAdapter(LlmExecutableProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, HttpClient.newBuilder()
+                // FastAPI/uvicorn은 cleartext HTTP/2 미지원. Java 기본 HTTP/2 negotiation을
+                // 시도하면 wrapper가 body를 못 읽어 422/400을 떨군다.
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(5))
                 .build());
     }
