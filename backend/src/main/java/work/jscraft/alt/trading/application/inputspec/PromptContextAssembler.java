@@ -56,7 +56,7 @@ public class PromptContextAssembler {
     private static final DateTimeFormatter HHMM = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter YMD_HM = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final DateTimeFormatter YMD = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final String USEFULNESS_USEFUL = "USEFUL";
+    private static final String USEFULNESS_USEFUL = "useful";
 
     private final PortfolioRepository portfolioRepository;
     private final PortfolioPositionRepository portfolioPositionRepository;
