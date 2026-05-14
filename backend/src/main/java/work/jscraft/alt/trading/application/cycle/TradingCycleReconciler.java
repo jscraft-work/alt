@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import work.jscraft.alt.common.config.ApplicationProfiles;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEntity;
@@ -45,6 +46,7 @@ public class TradingCycleReconciler {
     @Scheduled(
             initialDelayString = "${app.trading.reconcile.initial-delay-ms:5000}",
             fixedDelayString = "${app.trading.reconcile.interval-ms:60000}")
+    @Transactional(readOnly = true)
     public void reconcile() {
         List<StrategyInstanceEntity> activeInstances =
                 strategyInstanceRepository.findByLifecycleStateAndAutoPausedReasonIsNull(LIFECYCLE_ACTIVE);
