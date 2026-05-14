@@ -46,7 +46,7 @@ public class TradingCycleReconciler {
     @Scheduled(
             initialDelayString = "${app.trading.reconcile.initial-delay-ms:5000}",
             fixedDelayString = "${app.trading.reconcile.interval-ms:60000}")
-    @Transactional(readOnly = true)
+    @Transactional
     public void reconcile() {
         List<StrategyInstanceEntity> activeInstances =
                 strategyInstanceRepository.findByLifecycleStateAndAutoPausedReasonIsNull(LIFECYCLE_ACTIVE);
