@@ -163,6 +163,9 @@ public class KisMarketDataAdapter implements MarketDataGateway {
                     "KIS inquire-time-itemchartprice는 당일 분봉만 지원합니다");
         }
 
+        // KIS는 fid_input_hour_1을 "조회 종료 시각"으로 본다. 16:00 같은 미래 시각으로
+        // 호출하면 장중 응답이 비어 분봉이 못 쌓이므로, 현재 KST 시각을 그대로 넣는다.
+        String inquiryHour = OffsetDateTime.now(clock).atZoneSameInstant(KST).format(BAR_TIME);
         List<MinuteBar> collected = new ArrayList<>();
         String ctxFk = "";
         String ctxNk = "";
@@ -174,7 +177,7 @@ public class KisMarketDataAdapter implements MarketDataGateway {
                     .queryParam("fid_etc_cls_code", "")
                     .queryParam("fid_cond_mrkt_div_code", "J")
                     .queryParam("fid_input_iscd", symbolCode)
-                    .queryParam("fid_input_hour_1", "160000")
+                    .queryParam("fid_input_hour_1", inquiryHour)
                     .queryParam("fid_pw_data_incu_yn", "N")
                     .queryParam("CTX_AREA_FK200", ctxFk)
                     .queryParam("CTX_AREA_NK200", ctxNk);
