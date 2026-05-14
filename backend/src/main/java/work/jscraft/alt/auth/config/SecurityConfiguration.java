@@ -12,6 +12,7 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -104,6 +105,9 @@ public class SecurityConfiguration {
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/auth/login", "/api/auth/csrf").permitAll()
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
+                        // read-only admin endpoints are open so 차트/매매이력/뉴스 페이지가
+                        // 비로그인 상태에서도 동작한다. 설정 수정(POST/PATCH/DELETE)만 ADMIN.
+                        .requestMatchers(HttpMethod.GET, "/api/admin/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().permitAll())
                 .addFilterBefore(jwtSessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
