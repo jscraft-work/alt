@@ -51,14 +51,12 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         null,
                         new BigDecimal("10000000.0000"),
                         null,
-                        null,
                         null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.strategyTemplateId").value(template.getId().toString()))
                 .andExpect(jsonPath("$.data.lifecycleState").value("draft"))
                 .andExpect(jsonPath("$.data.executionMode").value("paper"))
                 .andExpect(jsonPath("$.data.tradingModelProfileId").isEmpty())
-                .andExpect(jsonPath("$.data.inputSpecOverride").isEmpty())
                 .andExpect(jsonPath("$.data.executionConfigOverride").isEmpty())
                 .andExpect(jsonPath("$.data.currentPromptVersionId").isNotEmpty())
                 .andReturn()
@@ -71,7 +69,6 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
 
         StrategyInstanceEntity createdEntity = strategyInstanceRepository.findById(UUID.fromString(strategyInstanceId)).orElseThrow();
         assertThat(createdEntity.getTradingModelProfile()).isNull();
-        assertThat(createdEntity.getInputSpecOverrideJson()).isNull();
         assertThat(createdEntity.getExecutionConfigOverrideJson()).isNull();
 
         List<StrategyInstancePromptVersionEntity> promptVersions =
@@ -90,7 +87,6 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                           "brokerAccountId": "%s",
                           "budgetAmount": 12000000,
                           "tradingModelProfileId": "%s",
-                          "inputSpecOverride": { "scope": "full_watchlist" },
                           "executionConfigOverride": { "slippageBps": 10 },
                           "version": %d
                         }
@@ -100,7 +96,6 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                 .andExpect(jsonPath("$.data.executionMode").value("live"))
                 .andExpect(jsonPath("$.data.brokerAccountId").value(brokerAccount.getId().toString()))
                 .andExpect(jsonPath("$.data.brokerAccountMasked").value("1234-****-7890"))
-                .andExpect(jsonPath("$.data.inputSpecOverride.scope").value("full_watchlist"))
                 .andExpect(jsonPath("$.data.executionConfigOverride.slippageBps").value(10))
                 .andReturn()
                 .getResponse()
@@ -151,7 +146,6 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         null,
                         new BigDecimal("10000000.0000"),
                         null,
-                        null,
                         null))))
                 .andExpect(status().isOk())
                 .andReturn()
@@ -165,13 +159,11 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
         nextProfile = llmModelProfileRepository.saveAndFlush(nextProfile);
 
         template.setDefaultTradingModelProfile(nextProfile);
-        template.setDefaultInputSpecJson(jsonObject("scope", "full_watchlist"));
         template.setDefaultExecutionConfigJson(jsonObject("slippageBps", 9));
         strategyTemplateRepository.saveAndFlush(template);
 
         StrategyInstanceEntity reloaded = strategyInstanceRepository.findById(UUID.fromString(strategyInstanceId)).orElseThrow();
         assertThat(reloaded.getTradingModelProfile()).isNull();
-        assertThat(reloaded.getInputSpecOverrideJson()).isNull();
         assertThat(reloaded.getExecutionConfigOverrideJson()).isNull();
 
         String listBody = mockMvc.perform(get("/api/admin/strategy-instances")
@@ -184,7 +176,6 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
         JsonNode listed = objectMapper.readTree(listBody).path("data").get(0);
         assertThat(listed.path("id").asText()).isEqualTo(strategyInstanceId);
         assertThat(listed.path("tradingModelProfileId").isNull()).isTrue();
-        assertThat(listed.path("inputSpecOverride").isNull()).isTrue();
         assertThat(listed.path("executionConfigOverride").isNull()).isTrue();
     }
 
@@ -204,7 +195,6 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         "paper",
                         null,
                         new BigDecimal("10000000.0000"),
-                        null,
                         null,
                         null))))
                 .andExpect(status().isOk())

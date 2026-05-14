@@ -58,10 +58,6 @@ public class StrategyInstanceEntity extends SoftDeletableUuidEntity {
     private LlmModelProfileEntity tradingModelProfile;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "input_spec_override_json", columnDefinition = "jsonb")
-    private JsonNode inputSpecOverrideJson;
-
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "execution_config_override_json", columnDefinition = "jsonb")
     private JsonNode executionConfigOverrideJson;
 
@@ -133,14 +129,6 @@ public class StrategyInstanceEntity extends SoftDeletableUuidEntity {
 
     public void setTradingModelProfile(LlmModelProfileEntity tradingModelProfile) {
         this.tradingModelProfile = tradingModelProfile;
-    }
-
-    public JsonNode getInputSpecOverrideJson() {
-        return inputSpecOverrideJson;
-    }
-
-    public void setInputSpecOverrideJson(JsonNode inputSpecOverrideJson) {
-        this.inputSpecOverrideJson = inputSpecOverrideJson;
     }
 
     public JsonNode getExecutionConfigOverrideJson() {

@@ -86,7 +86,6 @@ class OptimisticLockPersistenceTest {
         template.setDescription("optimistic template");
         template.setDefaultCycleMinutes(5);
         template.setDefaultPromptText("prompt");
-        template.setDefaultInputSpecJson(json("scope", "held_only"));
         template.setDefaultExecutionConfigJson(json("slippageBps", 5));
         template.setDefaultTradingModelProfile(modelProfile);
         template = strategyTemplateRepository.saveAndFlush(template);

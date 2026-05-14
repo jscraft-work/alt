@@ -91,7 +91,6 @@ abstract class AdminCatalogApiIntegrationTestSupport extends AuthApiIntegrationT
         template.setDescription(name + " description");
         template.setDefaultCycleMinutes(5);
         template.setDefaultPromptText(promptText);
-        template.setDefaultInputSpecJson(jsonObject("scope", "held_only"));
         template.setDefaultExecutionConfigJson(jsonObject("slippageBps", 5));
         template.setDefaultTradingModelProfile(modelProfile);
         return strategyTemplateRepository.saveAndFlush(template);
@@ -121,8 +120,7 @@ abstract class AdminCatalogApiIntegrationTestSupport extends AuthApiIntegrationT
             StrategyTemplateEntity template,
             String name,
             String executionMode,
-            java.util.UUID brokerAccountId,
-            JsonNode inputSpecOverride) throws Exception {
+            java.util.UUID brokerAccountId) throws Exception {
         String body = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/admin/strategy-instances")
                 .cookie(adminLogin.sessionCookie(), adminLogin.csrfCookie())
                 .header(authProperties.getCsrfHeaderName(), adminLogin.csrfCookie().getValue())
@@ -134,7 +132,6 @@ abstract class AdminCatalogApiIntegrationTestSupport extends AuthApiIntegrationT
                         brokerAccountId,
                         new BigDecimal("1000000.0000"),
                         null,
-                        inputSpecOverride,
                         null))))
                 .andExpect(MockMvcResultMatchers.status().isOk())
                 .andReturn()

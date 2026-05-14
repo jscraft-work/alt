@@ -38,7 +38,6 @@ class StrategyTemplateConstraintTest {
         invalidTemplate.setDescription("invalid");
         invalidTemplate.setDefaultCycleMinutes(0);
         invalidTemplate.setDefaultPromptText("prompt");
-        invalidTemplate.setDefaultInputSpecJson(objectMapper.createObjectNode().put("scope", "held_only"));
         invalidTemplate.setDefaultExecutionConfigJson(objectMapper.createObjectNode().put("slippageBps", 5));
         invalidTemplate.setDefaultTradingModelProfile(modelProfile);
 

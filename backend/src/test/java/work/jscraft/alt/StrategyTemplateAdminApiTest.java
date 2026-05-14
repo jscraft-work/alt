@@ -51,7 +51,6 @@ class StrategyTemplateAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         "기본 모멘텀 전략",
                         5,
                         "prompt-v1",
-                        jsonObject("scope", "held_only"),
                         jsonObject("slippageBps", 5),
                         UUID.fromString(modelProfileId));
 
@@ -82,7 +81,6 @@ class StrategyTemplateAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         "수정 설명",
                         3,
                         "prompt-v2",
-                        jsonObject("scope", "full_watchlist"),
                         jsonObject("slippageBps", 10),
                         UUID.fromString(modelProfileId),
                         0L);

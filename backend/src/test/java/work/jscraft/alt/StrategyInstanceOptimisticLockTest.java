@@ -42,7 +42,6 @@ class StrategyInstanceOptimisticLockTest extends AdminCatalogApiIntegrationTestS
                         null,
                         new BigDecimal("1000000.0000"),
                         null,
-                        null,
                         null))))
                 .andExpect(status().isOk())
                 .andReturn()
@@ -63,7 +62,6 @@ class StrategyInstanceOptimisticLockTest extends AdminCatalogApiIntegrationTestS
                           "executionMode": "paper",
                           "budgetAmount": 1200000,
                           "tradingModelProfileId": "%s",
-                          "inputSpecOverride": { "scope": "held_only" },
                           "executionConfigOverride": { "slippageBps": 7 },
                           "version": %d
                         }
@@ -85,7 +83,6 @@ class StrategyInstanceOptimisticLockTest extends AdminCatalogApiIntegrationTestS
                           "executionMode": "paper",
                           "budgetAmount": 1300000,
                           "tradingModelProfileId": "%s",
-                          "inputSpecOverride": { "scope": "held_only" },
                           "executionConfigOverride": { "slippageBps": 9 },
                           "version": %d
                         }

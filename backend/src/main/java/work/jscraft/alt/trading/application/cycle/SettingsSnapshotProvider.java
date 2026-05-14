@@ -46,9 +46,6 @@ public class SettingsSnapshotProvider {
                     "현재 프롬프트 버전이 설정되지 않아 사이클을 시작할 수 없습니다.");
         }
 
-        JsonNode inputSpec = instance.getInputSpecOverrideJson() != null
-                ? instance.getInputSpecOverrideJson().deepCopy()
-                : instance.getStrategyTemplate().getDefaultInputSpecJson().deepCopy();
         JsonNode executionConfig = instance.getExecutionConfigOverrideJson() != null
                 ? instance.getExecutionConfigOverrideJson().deepCopy()
                 : instance.getStrategyTemplate().getDefaultExecutionConfigJson().deepCopy();
@@ -69,7 +66,6 @@ public class SettingsSnapshotProvider {
                 promptVersion.getId(),
                 promptVersion.getPromptText(),
                 tradingModelProfileId,
-                inputSpec,
                 executionConfig,
                 List.copyOf(watchlistSymbols),
                 OffsetDateTime.now(clock));

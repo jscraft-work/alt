@@ -40,10 +40,6 @@ public class StrategyTemplateEntity extends SoftDeletableUuidEntity {
     private String defaultPromptText;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "default_input_spec_json", columnDefinition = "jsonb")
-    private JsonNode defaultInputSpecJson;
-
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "default_execution_config_json", nullable = false, columnDefinition = "jsonb")
     private JsonNode defaultExecutionConfigJson;
 
@@ -81,14 +77,6 @@ public class StrategyTemplateEntity extends SoftDeletableUuidEntity {
 
     public void setDefaultPromptText(String defaultPromptText) {
         this.defaultPromptText = defaultPromptText;
-    }
-
-    public JsonNode getDefaultInputSpecJson() {
-        return defaultInputSpecJson;
-    }
-
-    public void setDefaultInputSpecJson(JsonNode defaultInputSpecJson) {
-        this.defaultInputSpecJson = defaultInputSpecJson;
     }
 
     public JsonNode getDefaultExecutionConfigJson() {

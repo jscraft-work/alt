@@ -391,7 +391,6 @@ export interface StrategyTemplate {
   description: string | null;
   defaultCycleMinutes: number;
   defaultPromptText?: string | null;
-  defaultInputSpec?: JsonRecord;
   defaultExecutionConfig?: JsonRecord;
   defaultTradingModelProfileId: string | null;
   version: number;
@@ -403,7 +402,6 @@ export interface StrategyTemplateCreateRequest {
   description?: string | null;
   defaultCycleMinutes: number;
   defaultPromptText?: string;
-  defaultInputSpec?: JsonRecord;
   defaultExecutionConfig?: JsonRecord;
   defaultTradingModelProfileId?: string | null;
 }
@@ -413,7 +411,6 @@ export interface StrategyTemplateUpdateRequest {
   description?: string | null;
   defaultCycleMinutes: number;
   defaultPromptText?: string;
-  defaultInputSpec?: JsonRecord;
   defaultExecutionConfig?: JsonRecord;
   defaultTradingModelProfileId?: string | null;
   version: number;
@@ -431,7 +428,6 @@ export interface StrategyInstance {
   brokerAccountId: string | null;
   budgetAmount: number;
   tradingModelProfileId: string | null;
-  inputSpecOverride: JsonRecord | null;
   executionConfigOverride: JsonRecord | null;
   version: number;
   updatedAt: string;
@@ -444,7 +440,6 @@ export interface StrategyInstanceCreateRequest {
   brokerAccountId: string | null;
   budgetAmount: number;
   tradingModelProfileId: string | null;
-  inputSpecOverride?: JsonRecord | null;
   executionConfigOverride?: JsonRecord | null;
 }
 
@@ -454,7 +449,6 @@ export interface StrategyInstanceUpdateRequest {
   budgetAmount?: number;
   brokerAccountId?: string | null;
   tradingModelProfileId?: string | null;
-  inputSpecOverride?: JsonRecord | null;
   executionConfigOverride?: JsonRecord | null;
   version: number;
 }

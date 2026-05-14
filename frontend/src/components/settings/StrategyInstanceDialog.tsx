@@ -45,18 +45,6 @@ const schema = z.object({
     .int()
     .min(1, "0보다 커야 합니다."),
   tradingModelProfileId: z.string().optional(),
-  inputSpecOverrideJson: z
-    .string()
-    .optional()
-    .refine((value) => {
-      if (!value || value.trim() === "") return true;
-      try {
-        parseJsonRecord(value);
-        return true;
-      } catch {
-        return false;
-      }
-    }, "올바른 JSON 객체가 아닙니다."),
   executionConfigOverrideJson: z
     .string()
     .optional()
@@ -116,9 +104,6 @@ export default function StrategyInstanceDialog({
       brokerAccountId: instance?.brokerAccountId ?? "",
       budgetAmount: instance?.budgetAmount ?? 0,
       tradingModelProfileId: instance?.tradingModelProfileId ?? "",
-      inputSpecOverrideJson: stringifyJsonRecord(
-        instance?.inputSpecOverride ?? undefined,
-      ),
       executionConfigOverrideJson: stringifyJsonRecord(
         instance?.executionConfigOverride ?? undefined,
       ),
@@ -134,9 +119,6 @@ export default function StrategyInstanceDialog({
         brokerAccountId: instance?.brokerAccountId ?? "",
         budgetAmount: instance?.budgetAmount ?? 0,
         tradingModelProfileId: instance?.tradingModelProfileId ?? "",
-        inputSpecOverrideJson: stringifyJsonRecord(
-          instance?.inputSpecOverride ?? undefined,
-        ),
         executionConfigOverrideJson: stringifyJsonRecord(
           instance?.executionConfigOverride ?? undefined,
         ),
@@ -145,9 +127,6 @@ export default function StrategyInstanceDialog({
   }, [open, instance, reset]);
 
   const onSubmit = handleSubmit(async (values) => {
-    const inputSpec = values.inputSpecOverrideJson
-      ? parseJsonRecord(values.inputSpecOverrideJson)
-      : null;
     const executionConfig = values.executionConfigOverrideJson
       ? parseJsonRecord(values.executionConfigOverrideJson)
       : null;
@@ -169,7 +148,6 @@ export default function StrategyInstanceDialog({
         brokerAccountId,
         budgetAmount: values.budgetAmount,
         tradingModelProfileId,
-        inputSpecOverride: inputSpec,
         executionConfigOverride: executionConfig,
       });
       onSuccess("create");
@@ -182,7 +160,6 @@ export default function StrategyInstanceDialog({
           budgetAmount: values.budgetAmount,
           brokerAccountId,
           tradingModelProfileId,
-          inputSpecOverride: inputSpec,
           executionConfigOverride: executionConfig,
           version: instance.version,
         },
@@ -338,19 +315,6 @@ export default function StrategyInstanceDialog({
                 </option>
               ))}
             </select>
-          </FormField>
-
-          <FormField
-            id="instance-input-spec"
-            label="입력 스펙 오버라이드 (JSON)"
-            error={errors.inputSpecOverrideJson?.message}
-          >
-            <Textarea
-              id="instance-input-spec"
-              className="min-h-[100px] font-mono text-xs"
-              placeholder='{ "scope": "full_watchlist" }'
-              {...register("inputSpecOverrideJson")}
-            />
           </FormField>
 
           <FormField

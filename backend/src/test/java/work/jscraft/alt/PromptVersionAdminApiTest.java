@@ -32,7 +32,7 @@ class PromptVersionAdminApiTest extends AdminCatalogApiIntegrationTestSupport {
         LoginCookies adminLogin = login();
         LlmModelProfileEntity modelProfile = createTradingModelProfile();
         StrategyTemplateEntity template = createStrategyTemplate("Prompt Template", "template prompt v1", modelProfile);
-        JsonNode createdInstance = createStrategyInstance(adminLogin, template, "Prompt Instance", "paper", null, null);
+        JsonNode createdInstance = createStrategyInstance(adminLogin, template, "Prompt Instance", "paper", null);
 
         String strategyInstanceId = createdInstance.path("id").asText();
         UUID initialPromptVersionId = UUID.fromString(createdInstance.path("currentPromptVersionId").asText());

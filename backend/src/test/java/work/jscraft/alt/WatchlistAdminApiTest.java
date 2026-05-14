@@ -36,8 +36,7 @@ class WatchlistAdminApiTest extends AdminCatalogApiIntegrationTestSupport {
                 template,
                 "Watchlist Instance",
                 "paper",
-                null,
-                jsonObject("scope", "full_watchlist"));
+                null);
         String strategyInstanceId = createdInstance.path("id").asText();
 
         mockMvc.perform(post("/api/admin/strategy-instances/{strategyInstanceId}/watchlist", strategyInstanceId)

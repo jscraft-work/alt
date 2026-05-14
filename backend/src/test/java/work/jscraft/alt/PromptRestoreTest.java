@@ -32,7 +32,7 @@ class PromptRestoreTest extends AdminCatalogApiIntegrationTestSupport {
         LoginCookies adminLogin = login();
         LlmModelProfileEntity modelProfile = createTradingModelProfile();
         StrategyTemplateEntity template = createStrategyTemplate("Restore Template", "template prompt v1", modelProfile);
-        JsonNode createdInstance = createStrategyInstance(adminLogin, template, "Restore Instance", "paper", null, null);
+        JsonNode createdInstance = createStrategyInstance(adminLogin, template, "Restore Instance", "paper", null);
 
         String strategyInstanceId = createdInstance.path("id").asText();
         String versionOneId = createdInstance.path("currentPromptVersionId").asText();

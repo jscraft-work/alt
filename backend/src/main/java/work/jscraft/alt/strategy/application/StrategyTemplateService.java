@@ -114,7 +114,6 @@ public class StrategyTemplateService {
         entity.setDescription(request.description());
         entity.setDefaultCycleMinutes(request.defaultCycleMinutes());
         entity.setDefaultPromptText(request.defaultPromptText());
-        entity.setDefaultInputSpecJson(request.defaultInputSpec());
         entity.setDefaultExecutionConfigJson(request.defaultExecutionConfig());
         entity.setDefaultTradingModelProfile(modelProfile);
     }
@@ -137,7 +136,6 @@ public class StrategyTemplateService {
                 entity.getDescription(),
                 entity.getDefaultCycleMinutes(),
                 entity.getDefaultPromptText(),
-                entity.getDefaultInputSpecJson(),
                 entity.getDefaultExecutionConfigJson(),
                 entity.getDefaultTradingModelProfile().getId().toString(),
                 entity.getVersion(),
@@ -153,8 +151,6 @@ public class StrategyTemplateService {
 
         String defaultPromptText();
 
-        JsonNode defaultInputSpec();
-
         JsonNode defaultExecutionConfig();
 
         UUID defaultTradingModelProfileId();
@@ -166,7 +162,6 @@ public class StrategyTemplateService {
             String description,
             int defaultCycleMinutes,
             String defaultPromptText,
-            JsonNode defaultInputSpec,
             JsonNode defaultExecutionConfig,
             String defaultTradingModelProfileId,
             long version,
@@ -178,7 +173,6 @@ public class StrategyTemplateService {
             @NotBlank(message = "description은 필수입니다.") String description,
             @Min(value = 1, message = "defaultCycleMinutes는 1 이상이어야 합니다.") @Max(value = 30, message = "defaultCycleMinutes는 30 이하여야 합니다.") int defaultCycleMinutes,
             @NotBlank(message = "defaultPromptText는 필수입니다.") String defaultPromptText,
-            @NotNull(message = "defaultInputSpec은 필수입니다.") JsonNode defaultInputSpec,
             @NotNull(message = "defaultExecutionConfig는 필수입니다.") JsonNode defaultExecutionConfig,
             @NotNull(message = "defaultTradingModelProfileId는 필수입니다.") UUID defaultTradingModelProfileId)
             implements StrategyTemplateMutation {
@@ -189,7 +183,6 @@ public class StrategyTemplateService {
             @NotBlank(message = "description은 필수입니다.") String description,
             @Min(value = 1, message = "defaultCycleMinutes는 1 이상이어야 합니다.") @Max(value = 30, message = "defaultCycleMinutes는 30 이하여야 합니다.") int defaultCycleMinutes,
             @NotBlank(message = "defaultPromptText는 필수입니다.") String defaultPromptText,
-            @NotNull(message = "defaultInputSpec은 필수입니다.") JsonNode defaultInputSpec,
             @NotNull(message = "defaultExecutionConfig은 필수입니다.") JsonNode defaultExecutionConfig,
             @NotNull(message = "defaultTradingModelProfileId는 필수입니다.") UUID defaultTradingModelProfileId,
             @NotNull(message = "version은 필수입니다.") Long version)

@@ -78,7 +78,6 @@ class StrategyInstanceActivationTest extends AdminCatalogApiIntegrationTestSuppo
                         brokerAccountId,
                         new BigDecimal("1000000.0000"),
                         null,
-                        null,
                         null))))
                 .andExpect(status().isOk())
                 .andReturn()

@@ -64,7 +64,6 @@ class CoreRepositoryMappingTest {
         strategyTemplate.setDescription("default swing strategy");
         strategyTemplate.setDefaultCycleMinutes(5);
         strategyTemplate.setDefaultPromptText("prompt");
-        strategyTemplate.setDefaultInputSpecJson(json("scope", "held_only"));
         strategyTemplate.setDefaultExecutionConfigJson(json("slippageBps", 5));
         strategyTemplate.setDefaultTradingModelProfile(modelProfile);
         strategyTemplate = strategyTemplateRepository.saveAndFlush(strategyTemplate);
@@ -107,7 +106,6 @@ class CoreRepositoryMappingTest {
         SystemParameterEntity loadedParameter = systemParameterRepository.findById("trading.window").orElseThrow();
 
         assertThat(loadedTemplate.getDefaultTradingModelProfile().getId()).isEqualTo(modelProfile.getId());
-        assertThat(loadedTemplate.getDefaultInputSpecJson().path("scope").asText()).isEqualTo("held_only");
         assertThat(loadedBrokerAccount.getAccountMasked()).isEqualTo("1234-****");
         assertThat(loadedAsset.getSymbolName()).isEqualTo("Samsung Electronics");
         assertThat(loadedUser.getDisplayName()).isEqualTo("Administrator");

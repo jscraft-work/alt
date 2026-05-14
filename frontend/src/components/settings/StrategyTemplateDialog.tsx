@@ -35,18 +35,6 @@ const schema = z.object({
     .min(1, "1분 이상이어야 합니다.")
     .max(30, "30분 이하만 허용됩니다."),
   defaultPromptText: z.string().optional(),
-  defaultInputSpecJson: z
-    .string()
-    .optional()
-    .refine((value) => {
-      if (!value || value.trim() === "") return true;
-      try {
-        parseJsonRecord(value);
-        return true;
-      } catch {
-        return false;
-      }
-    }, "올바른 JSON 객체가 아닙니다."),
   defaultExecutionConfigJson: z
     .string()
     .optional()
@@ -95,7 +83,6 @@ export default function StrategyTemplateDialog({
       description: template?.description ?? "",
       defaultCycleMinutes: template?.defaultCycleMinutes ?? 5,
       defaultPromptText: template?.defaultPromptText ?? "",
-      defaultInputSpecJson: stringifyJsonRecord(template?.defaultInputSpec),
       defaultExecutionConfigJson: stringifyJsonRecord(
         template?.defaultExecutionConfig,
       ),
@@ -111,7 +98,6 @@ export default function StrategyTemplateDialog({
         description: template?.description ?? "",
         defaultCycleMinutes: template?.defaultCycleMinutes ?? 5,
         defaultPromptText: template?.defaultPromptText ?? "",
-        defaultInputSpecJson: stringifyJsonRecord(template?.defaultInputSpec),
         defaultExecutionConfigJson: stringifyJsonRecord(
           template?.defaultExecutionConfig,
         ),
@@ -122,9 +108,6 @@ export default function StrategyTemplateDialog({
   }, [open, template, reset]);
 
   const onSubmit = handleSubmit(async (values) => {
-    const inputSpec = values.defaultInputSpecJson
-      ? parseJsonRecord(values.defaultInputSpecJson)
-      : undefined;
     const executionConfig = values.defaultExecutionConfigJson
       ? parseJsonRecord(values.defaultExecutionConfigJson)
       : undefined;
@@ -140,7 +123,6 @@ export default function StrategyTemplateDialog({
         description: values.description?.trim() || null,
         defaultCycleMinutes: values.defaultCycleMinutes,
         defaultPromptText: values.defaultPromptText || undefined,
-        defaultInputSpec: inputSpec,
         defaultExecutionConfig: executionConfig,
         defaultTradingModelProfileId: profileId,
       });
@@ -153,7 +135,6 @@ export default function StrategyTemplateDialog({
           description: values.description?.trim() || null,
           defaultCycleMinutes: values.defaultCycleMinutes,
           defaultPromptText: values.defaultPromptText || undefined,
-          defaultInputSpec: inputSpec,
           defaultExecutionConfig: executionConfig,
           defaultTradingModelProfileId: profileId,
           version: template.version,
@@ -236,19 +217,6 @@ export default function StrategyTemplateDialog({
               id="template-prompt"
               className="min-h-[100px] font-mono text-xs"
               {...register("defaultPromptText")}
-            />
-          </FormField>
-
-          <FormField
-            id="template-input-spec"
-            label="기본 입력 스펙 (JSON)"
-            error={errors.defaultInputSpecJson?.message}
-          >
-            <Textarea
-              id="template-input-spec"
-              className="min-h-[100px] font-mono text-xs"
-              placeholder='{ "scope": "full_watchlist" }'
-              {...register("defaultInputSpecJson")}
             />
           </FormField>
 

@@ -46,7 +46,6 @@ class SoftDeleteVisibilityTest {
         template.setDescription("to be deleted");
         template.setDefaultCycleMinutes(10);
         template.setDefaultPromptText("prompt");
-        template.setDefaultInputSpecJson(objectMapper.createObjectNode().put("scope", "held_only"));
         template.setDefaultExecutionConfigJson(objectMapper.createObjectNode().put("slippageBps", 5));
         template.setDefaultTradingModelProfile(modelProfile);
         template = strategyTemplateRepository.saveAndFlush(template);

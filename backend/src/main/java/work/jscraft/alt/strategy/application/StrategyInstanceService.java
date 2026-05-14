@@ -118,7 +118,6 @@ public class StrategyInstanceService {
         entity.setBrokerAccount(brokerAccount);
         entity.setBudgetAmount(request.budgetAmount());
         entity.setTradingModelProfile(tradingModelProfile);
-        entity.setInputSpecOverrideJson(copyJsonValue(request.inputSpecOverride()));
         entity.setExecutionConfigOverrideJson(copyJsonValue(request.executionConfigOverride()));
 
         strategyInstanceRepository.saveAndFlush(entity);
@@ -169,9 +168,6 @@ public class StrategyInstanceService {
         LlmModelProfileEntity requestedTradingModelProfile = request.hasTradingModelProfileId()
                 ? findTradingModelProfileOverride(request.tradingModelProfileId())
                 : entity.getTradingModelProfile();
-        JsonNode requestedInputSpec = request.hasInputSpecOverride()
-                ? copyJsonValue(request.inputSpecOverride())
-                : copyJsonValue(entity.getInputSpecOverrideJson());
         JsonNode requestedExecutionConfig = request.hasExecutionConfigOverride()
                 ? copyJsonValue(request.executionConfigOverride())
                 : copyJsonValue(entity.getExecutionConfigOverrideJson());
@@ -196,7 +192,6 @@ public class StrategyInstanceService {
         entity.setBrokerAccount(requestedBrokerAccount);
         entity.setBudgetAmount(requestedBudgetAmount);
         entity.setTradingModelProfile(requestedTradingModelProfile);
-        entity.setInputSpecOverrideJson(requestedInputSpec);
         entity.setExecutionConfigOverrideJson(requestedExecutionConfig);
 
         StrategyInstanceView updated = toView(strategyInstanceRepository.saveAndFlush(entity));
@@ -575,7 +570,6 @@ public class StrategyInstanceService {
                 entity.getBudgetAmount(),
                 entity.getCurrentPromptVersion() == null ? null : entity.getCurrentPromptVersion().getId().toString(),
                 entity.getTradingModelProfile() == null ? null : entity.getTradingModelProfile().getId().toString(),
-                copyJsonValue(entity.getInputSpecOverrideJson()),
                 copyJsonValue(entity.getExecutionConfigOverrideJson()),
                 entity.getAutoPausedReason(),
                 entity.getAutoPausedAt() == null ? null : entity.getAutoPausedAt().toString(),
@@ -629,7 +623,6 @@ public class StrategyInstanceService {
             BigDecimal budgetAmount,
             String currentPromptVersionId,
             String tradingModelProfileId,
-            JsonNode inputSpecOverride,
             JsonNode executionConfigOverride,
             String autoPausedReason,
             String autoPausedAt,
@@ -669,7 +662,6 @@ public class StrategyInstanceService {
                     value = "0.0001",
                     message = "budgetAmount는 0보다 커야 합니다.") BigDecimal budgetAmount,
             UUID tradingModelProfileId,
-            JsonNode inputSpecOverride,
             JsonNode executionConfigOverride) {
     }
 
@@ -684,8 +676,6 @@ public class StrategyInstanceService {
         private BigDecimal budgetAmount;
         private boolean tradingModelProfileIdPresent;
         private UUID tradingModelProfileId;
-        private boolean inputSpecOverridePresent;
-        private JsonNode inputSpecOverride;
         private boolean executionConfigOverridePresent;
         private JsonNode executionConfigOverride;
         @NotNull(message = "version은 필수입니다.")
@@ -759,20 +749,6 @@ public class StrategyInstanceService {
         public void setTradingModelProfileId(UUID tradingModelProfileId) {
             this.tradingModelProfileIdPresent = true;
             this.tradingModelProfileId = tradingModelProfileId;
-        }
-
-        public boolean hasInputSpecOverride() {
-            return inputSpecOverridePresent;
-        }
-
-        public JsonNode inputSpecOverride() {
-            return inputSpecOverride;
-        }
-
-        @JsonSetter("inputSpecOverride")
-        public void setInputSpecOverride(JsonNode inputSpecOverride) {
-            this.inputSpecOverridePresent = true;
-            this.inputSpecOverride = inputSpecOverride;
         }
 
         public boolean hasExecutionConfigOverride() {

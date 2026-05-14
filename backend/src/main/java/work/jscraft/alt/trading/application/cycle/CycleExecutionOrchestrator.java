@@ -249,7 +249,6 @@ public class CycleExecutionOrchestrator {
         node.put("executionMode", snapshot.executionMode());
         node.put("promptVersionId", snapshot.promptVersionId().toString());
         node.put("tradingModelProfileId", snapshot.tradingModelProfileId().toString());
-        node.set("inputSpec", snapshot.inputSpec() != null ? snapshot.inputSpec() : objectMapper.createObjectNode());
         node.set("executionConfig",
                 snapshot.executionConfig() != null ? snapshot.executionConfig() : objectMapper.createObjectNode());
         ArrayNode watchlist = objectMapper.createArrayNode();

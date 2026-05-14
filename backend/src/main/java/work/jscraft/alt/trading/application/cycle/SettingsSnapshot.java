@@ -12,7 +12,6 @@ public record SettingsSnapshot(
         UUID promptVersionId,
         String promptText,
         UUID tradingModelProfileId,
-        JsonNode inputSpec,
         JsonNode executionConfig,
         List<String> watchlistSymbols,
         OffsetDateTime capturedAt) {

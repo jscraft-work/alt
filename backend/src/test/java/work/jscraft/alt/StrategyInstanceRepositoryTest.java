@@ -63,7 +63,6 @@ class StrategyInstanceRepositoryTest {
         instance.setExecutionMode("paper");
         instance.setBudgetAmount(new BigDecimal("1000000.0000"));
         instance.setTradingModelProfile(modelProfile);
-        instance.setInputSpecOverrideJson(json("scope", "held_and_candidates"));
         instance.setExecutionConfigOverrideJson(json("slippageBps", 5));
         instance = strategyInstanceRepository.saveAndFlush(instance);
 
@@ -122,7 +121,6 @@ class StrategyInstanceRepositoryTest {
         template.setDescription("default swing strategy");
         template.setDefaultCycleMinutes(5);
         template.setDefaultPromptText("default prompt");
-        template.setDefaultInputSpecJson(json("scope", "held_only"));
         template.setDefaultExecutionConfigJson(json("slippageBps", 3));
         template.setDefaultTradingModelProfile(modelProfile);
         return strategyTemplateRepository.saveAndFlush(template);

@@ -30,7 +30,7 @@ class WatchlistUniqueReuseTest extends AdminCatalogApiIntegrationTestSupport {
         LlmModelProfileEntity modelProfile = createTradingModelProfile();
         StrategyTemplateEntity template = createStrategyTemplate("Watchlist Unique Template", "template prompt", modelProfile);
         AssetMasterEntity assetMaster = createAsset("000660", "SK하이닉스", "00164779");
-        JsonNode createdInstance = createStrategyInstance(adminLogin, template, "Watchlist Reuse", "paper", null, null);
+        JsonNode createdInstance = createStrategyInstance(adminLogin, template, "Watchlist Reuse", "paper", null);
         String strategyInstanceId = createdInstance.path("id").asText();
 
         StrategyInstanceService.AddWatchlistAssetRequest request =
