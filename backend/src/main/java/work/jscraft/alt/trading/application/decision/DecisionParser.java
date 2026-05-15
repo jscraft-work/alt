@@ -6,8 +6,10 @@ import java.util.List;
 import java.util.Set;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 
 import org.springframework.stereotype.Component;
 
@@ -25,9 +27,14 @@ public class DecisionParser {
     private static final Set<String> ALLOWED_ORDER_TYPES = Set.of("MARKET", "LIMIT");
 
     private final ObjectMapper objectMapper;
+    private final ObjectReader lenientReader;
 
     public DecisionParser(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        // LLM이 rationale 같은 string value 안에 escape 안 된 raw newline을 흘려서 응답하는
+        // 케이스가 흔하다. 표준 JSON은 거부지만 운영적으로 관대하게 받아 둔다.
+        this.lenientReader = objectMapper.reader()
+                .with(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS);
     }
 
     public ParsedDecision parse(String stdoutText) {
@@ -37,7 +44,7 @@ public class DecisionParser {
         }
         JsonNode root;
         try {
-            root = objectMapper.readTree(stdoutText);
+            root = lenientReader.readTree(stdoutText);
         } catch (JsonProcessingException ex) {
             throw new DecisionParseException(
                     DecisionParseException.Reason.INVALID_JSON,
