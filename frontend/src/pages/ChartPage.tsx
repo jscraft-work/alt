@@ -117,7 +117,7 @@ export default function ChartPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-semibold">차트</h1>
@@ -274,8 +274,8 @@ export default function ChartPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.75fr)]">
-        <Card className="min-h-[560px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.75fr)]">
+        <Card>
           <CardHeader>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
@@ -526,7 +526,7 @@ function StatePanel({
     <div
       className={cn(
         "flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/20 px-6 text-center",
-        compact ? "min-h-[180px] py-8" : "min-h-[420px] py-12",
+        compact ? "min-h-[120px] py-6" : "min-h-[240px] py-8",
       )}
     >
       <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">

@@ -1,6 +1,7 @@
 package work.jscraft.alt.collector.application.marketdata;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 
@@ -18,6 +19,10 @@ public class KisMinuteBarCollector {
 
     public static final String EVENT_TYPE = "marketdata.minute-bar.collect";
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    // KIS는 장 마감(15:30) 이후 시간외 단일가/단일 종가로 zero-volume 분봉을 18:00까지 채워서 응답한다.
+    // 그 더미 분봉이 차트·일봉 집계·박스 단타 LLM 컨텍스트에 노이즈로 들어가므로 저장 단계에서 차단.
+    private static final LocalTime MARKET_OPEN = LocalTime.of(9, 0);
+    private static final LocalTime MARKET_CLOSE = LocalTime.of(15, 30);
 
     private final MarketDataGateway marketDataGateway;
     private final MarketMinuteItemRepository marketMinuteItemRepository;
@@ -38,6 +43,11 @@ public class KisMinuteBarCollector {
             int saved = 0;
             int skipped = 0;
             for (MinuteBar bar : bars) {
+                LocalTime kstTime = bar.barTime().atZoneSameInstant(KST).toLocalTime();
+                if (kstTime.isBefore(MARKET_OPEN) || kstTime.isAfter(MARKET_CLOSE)) {
+                    skipped++;
+                    continue;
+                }
                 boolean exists = marketMinuteItemRepository
                         .existsBySymbolCodeAndBarTimeAndSourceName(bar.symbolCode(), bar.barTime(), bar.sourceName());
                 if (exists) {
