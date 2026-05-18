@@ -31,7 +31,7 @@ class StrategyTemplateAdminApiTest extends AdminCatalogApiIntegrationTestSupport
     }
 
     @Test
-    void adminEndpointsRequireAdminRole() throws Exception {
+    void templateReadEndpointIsPublicButWritesRequireAdminRole() throws Exception {
         mockMvc.perform(get("/api/admin/strategy-templates"))
                 .andExpect(status().isOk());
 
@@ -40,6 +40,36 @@ class StrategyTemplateAdminApiTest extends AdminCatalogApiIntegrationTestSupport
         mockMvc.perform(get("/api/admin/strategy-templates")
                 .cookie(viewerLogin.sessionCookie()))
                 .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/admin/strategy-templates")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "name": "KR 모멘텀 템플릿",
+                          "description": "기본 모멘텀 전략",
+                          "defaultCycleMinutes": 5,
+                          "defaultPromptText": "prompt-v1",
+                          "defaultExecutionConfig": { "slippageBps": 5 },
+                          "defaultTradingModelProfileId": "%s"
+                        }
+                        """.formatted(createTradingModelProfile().getId())))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/admin/strategy-templates")
+                .cookie(viewerLogin.sessionCookie(), viewerLogin.csrfCookie())
+                .header(authProperties.getCsrfHeaderName(), viewerLogin.csrfCookie().getValue())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "name": "KR 모멘텀 템플릿",
+                          "description": "기본 모멘텀 전략",
+                          "defaultCycleMinutes": 5,
+                          "defaultPromptText": "prompt-v1",
+                          "defaultExecutionConfig": { "slippageBps": 5 },
+                          "defaultTradingModelProfileId": "%s"
+                        }
+                        """.formatted(createTradingModelProfile().getId())))
+                .andExpect(status().isForbidden());
     }
 
     @Test

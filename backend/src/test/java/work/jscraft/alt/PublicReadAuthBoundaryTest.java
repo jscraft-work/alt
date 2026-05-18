@@ -39,13 +39,13 @@ class PublicReadAuthBoundaryTest extends AdminCatalogApiIntegrationTestSupport {
     }
 
     @Test
-    void adminEndpointsStillRequireAuthentication() throws Exception {
+    void adminReadEndpointsAllowAnonymousAccess() throws Exception {
         mockMvc.perform(get("/api/admin/strategy-instances"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk());
         mockMvc.perform(get("/api/admin/strategy-templates"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk());
         mockMvc.perform(get("/api/admin/broker-accounts"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk());
     }
 
     @Test
