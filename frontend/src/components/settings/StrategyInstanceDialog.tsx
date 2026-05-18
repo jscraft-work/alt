@@ -198,187 +198,193 @@ export default function StrategyInstanceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden p-0">
         <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? "전략 인스턴스 추가" : "전략 인스턴스 수정"}
-          </DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "신규 인스턴스는 항상 draft 상태로 생성됩니다."
-              : "변경된 설정은 다음 사이클부터 반영됩니다. lifecycle 제약은 §10.2 를 따릅니다."}
-          </DialogDescription>
+          <div className="border-b px-6 py-5">
+            <DialogTitle>
+              {mode === "create" ? "전략 인스턴스 추가" : "전략 인스턴스 수정"}
+            </DialogTitle>
+            <DialogDescription>
+              {mode === "create"
+                ? "신규 인스턴스는 항상 draft 상태로 생성됩니다."
+                : "변경된 설정은 다음 사이클부터 반영됩니다. lifecycle 제약은 §10.2 를 따릅니다."}
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
         <form
-          className="flex flex-col gap-4"
+          className="flex min-h-0 flex-1 flex-col"
           onSubmit={(event) => {
             void onSubmit(event);
           }}
         >
-          <FormField
-            id="instance-template"
-            label="템플릿"
-            required
-            error={errors.strategyTemplateId?.message}
-          >
-            <select
-              id="instance-template"
-              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={mode === "edit"}
-              {...register("strategyTemplateId")}
-            >
-              <option value="">— 선택 —</option>
-              {(templates.data ?? []).map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </FormField>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex flex-col gap-4">
+              <FormField
+                id="instance-template"
+                label="템플릿"
+                required
+                error={errors.strategyTemplateId?.message}
+              >
+                <select
+                  id="instance-template"
+                  className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={mode === "edit"}
+                  {...register("strategyTemplateId")}
+                >
+                  <option value="">— 선택 —</option>
+                  {(templates.data ?? []).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
 
-          <FormField
-            id="instance-name"
-            label="이름"
-            required
-            helpText={
-              !allowNameModeAccountEdit
-                ? "active 상태에서는 이름 변경이 불가합니다. (§10.2)"
-                : undefined
-            }
-            error={errors.name?.message}
-          >
-            <Input
-              id="instance-name"
-              disabled={!allowNameModeAccountEdit}
-              {...register("name")}
-            />
-          </FormField>
+              <FormField
+                id="instance-name"
+                label="이름"
+                required
+                helpText={
+                  !allowNameModeAccountEdit
+                    ? "active 상태에서는 이름 변경이 불가합니다. (§10.2)"
+                    : undefined
+                }
+                error={errors.name?.message}
+              >
+                <Input
+                  id="instance-name"
+                  disabled={!allowNameModeAccountEdit}
+                  {...register("name")}
+                />
+              </FormField>
 
-          <FormField
-            id="instance-mode"
-            label="실행 모드"
-            required
-            helpText={
-              !allowNameModeAccountEdit
-                ? "active 상태에서는 모드 변경이 불가합니다."
-                : "live 모드는 연결 계좌 필수."
-            }
-            error={errors.executionMode?.message}
-          >
-            <select
-              id="instance-mode"
-              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!allowNameModeAccountEdit}
-              {...register("executionMode")}
-            >
-              {EXECUTION_MODES.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </FormField>
+              <FormField
+                id="instance-mode"
+                label="실행 모드"
+                required
+                helpText={
+                  !allowNameModeAccountEdit
+                    ? "active 상태에서는 모드 변경이 불가합니다."
+                    : "live 모드는 연결 계좌 필수."
+                }
+                error={errors.executionMode?.message}
+              >
+                <select
+                  id="instance-mode"
+                  className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!allowNameModeAccountEdit}
+                  {...register("executionMode")}
+                >
+                  {EXECUTION_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
 
-          <FormField
-            id="instance-budget"
-            label="전략 예산 (KRW)"
-            required
-            helpText={
-              !allowBudgetEdit
-                ? "예산은 draft 에서만 변경 가능합니다. (§10.2)"
-                : undefined
-            }
-            error={errors.budgetAmount?.message}
-          >
-            <Input
-              id="instance-budget"
-              type="number"
-              min={1}
-              disabled={!allowBudgetEdit}
-              {...register("budgetAmount", { valueAsNumber: true })}
-            />
-          </FormField>
+              <FormField
+                id="instance-budget"
+                label="전략 예산 (KRW)"
+                required
+                helpText={
+                  !allowBudgetEdit
+                    ? "예산은 draft 에서만 변경 가능합니다. (§10.2)"
+                    : undefined
+                }
+                error={errors.budgetAmount?.message}
+              >
+                <Input
+                  id="instance-budget"
+                  type="number"
+                  min={1}
+                  disabled={!allowBudgetEdit}
+                  {...register("budgetAmount", { valueAsNumber: true })}
+                />
+              </FormField>
 
-          <FormField
-            id="instance-broker"
-            label="연결 계좌"
-            helpText={
-              !allowNameModeAccountEdit
-                ? "active 상태에서는 변경 불가."
-                : "live 모드 인스턴스 활성화 전에 필수."
-            }
-            error={errors.brokerAccountId?.message}
-          >
-            <select
-              id="instance-broker"
-              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!allowNameModeAccountEdit}
-              {...register("brokerAccountId")}
-            >
-              <option value="">— 없음 —</option>
-              {(accounts.data ?? []).map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.alias} ({a.accountNumberMasked})
-                </option>
-              ))}
-            </select>
-          </FormField>
+              <FormField
+                id="instance-broker"
+                label="연결 계좌"
+                helpText={
+                  !allowNameModeAccountEdit
+                    ? "active 상태에서는 변경 불가."
+                    : "live 모드 인스턴스 활성화 전에 필수."
+                }
+                error={errors.brokerAccountId?.message}
+              >
+                <select
+                  id="instance-broker"
+                  className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!allowNameModeAccountEdit}
+                  {...register("brokerAccountId")}
+                >
+                  <option value="">— 없음 —</option>
+                  {(accounts.data ?? []).map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.alias} ({a.accountNumberMasked})
+                    </option>
+                  ))}
+                </select>
+              </FormField>
 
-          <FormField
-            id="instance-cycle"
-            label="실행 주기 (분)"
-            helpText={
-              inheritedCycleMinutes != null
-                ? `비워두면 템플릿 기본값 ${inheritedCycleMinutes}분을 사용합니다.`
-                : "비워두면 템플릿 기본값을 사용합니다."
-            }
-            error={errors.cycleMinutesText?.message}
-          >
-            <Input
-              id="instance-cycle"
-              type="number"
-              min={1}
-              max={30}
-              placeholder="템플릿 기본값 사용"
-              {...register("cycleMinutesText")}
-            />
-          </FormField>
+              <FormField
+                id="instance-cycle"
+                label="실행 주기 (분)"
+                helpText={
+                  inheritedCycleMinutes != null
+                    ? `비워두면 템플릿 기본값 ${inheritedCycleMinutes}분을 사용합니다.`
+                    : "비워두면 템플릿 기본값을 사용합니다."
+                }
+                error={errors.cycleMinutesText?.message}
+              >
+                <Input
+                  id="instance-cycle"
+                  type="number"
+                  min={1}
+                  max={30}
+                  placeholder="템플릿 기본값 사용"
+                  {...register("cycleMinutesText")}
+                />
+              </FormField>
 
-          <FormField
-            id="instance-model"
-            label="트레이딩 모델 프로필"
-            helpText="비워두면 템플릿 기본값을 사용합니다."
-            error={errors.tradingModelProfileId?.message}
-          >
-            <select
-              id="instance-model"
-              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              {...register("tradingModelProfileId")}
-            >
-              <option value="">— 템플릿 기본값 —</option>
-              {(models.data ?? []).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.modelName})
-                </option>
-              ))}
-            </select>
-          </FormField>
+              <FormField
+                id="instance-model"
+                label="트레이딩 모델 프로필"
+                helpText="비워두면 템플릿 기본값을 사용합니다."
+                error={errors.tradingModelProfileId?.message}
+              >
+                <select
+                  id="instance-model"
+                  className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  {...register("tradingModelProfileId")}
+                >
+                  <option value="">— 템플릿 기본값 —</option>
+                  {(models.data ?? []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.modelName})
+                    </option>
+                  ))}
+                </select>
+              </FormField>
 
-          <FormField
-            id="instance-exec-config"
-            label="실행 설정 오버라이드 (JSON)"
-            error={errors.executionConfigOverrideJson?.message}
-          >
-            <Textarea
-              id="instance-exec-config"
-              className="min-h-[100px] font-mono text-xs"
-              placeholder='{ "slippageBps": 10 }'
-              {...register("executionConfigOverrideJson")}
-            />
-          </FormField>
+              <FormField
+                id="instance-exec-config"
+                label="실행 설정 오버라이드 (JSON)"
+                error={errors.executionConfigOverrideJson?.message}
+              >
+                <Textarea
+                  id="instance-exec-config"
+                  className="min-h-[100px] font-mono text-xs"
+                  placeholder='{ "slippageBps": 10 }'
+                  {...register("executionConfigOverrideJson")}
+                />
+              </FormField>
+            </div>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="border-t px-6 py-4">
             <Button
               type="button"
               variant="outline"
