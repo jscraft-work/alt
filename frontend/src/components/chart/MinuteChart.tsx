@@ -1,93 +1,261 @@
+import { useEffect, useMemo, useRef } from "react";
+import {
+  CandlestickSeries,
+  ColorType,
+  HistogramSeries,
+  type IChartApi,
+  type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type LogicalRange,
+  type SeriesMarker,
+  type Time,
+  type UTCTimestamp,
+  createChart,
+  createSeriesMarkers,
+} from "lightweight-charts";
+import type {
+  CandlestickData,
+  HistogramData,
+} from "lightweight-charts";
 import type { ChartOrderOverlay, MinuteBar } from "@/lib/api-types";
-import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const VIEWBOX_WIDTH = 960;
-const VIEWBOX_HEIGHT = 420;
-const PRICE_CHART_HEIGHT = 238;
-const VOLUME_CHART_HEIGHT = 76;
-const CHART_GAP = 34;
-const MARGIN_TOP = 24;
-const MARGIN_RIGHT = 72;
-const MARGIN_BOTTOM = 42;
-const MARGIN_LEFT = 72;
-const GRID_TICK_COUNT = 5;
-const TIME_TICK_COUNT = 6;
+const HISTORY_LOAD_THRESHOLD = 24;
 
 interface MinuteChartProps {
   bars: MinuteBar[];
   overlays: ChartOrderOverlay[];
   className?: string;
+  isLoadingMoreHistory?: boolean;
+  onRequestOlderHistory?: () => void;
 }
 
 export default function MinuteChart({
   bars,
   overlays,
   className,
+  isLoadingMoreHistory = false,
+  onRequestOlderHistory,
 }: MinuteChartProps) {
-  const chartLeft = MARGIN_LEFT;
-  const chartTop = MARGIN_TOP;
-  const chartWidth = VIEWBOX_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
-  const priceChartBottom = chartTop + PRICE_CHART_HEIGHT;
-  const volumeChartTop = priceChartBottom + CHART_GAP;
-  const volumeChartBottom = volumeChartTop + VOLUME_CHART_HEIGHT;
-  const timeTickIndexes = createTimeTickIndexes(bars.length, TIME_TICK_COUNT);
-  const overlayPrices = overlays
-    .map((overlay) => getOverlayPrice(overlay, bars))
-    .filter((price): price is number => price !== null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const candleSeriesRef =
+    useRef<ISeriesApi<"Candlestick", Time> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram", Time> | null>(null);
+  const markerPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const hasInitialViewRef = useRef(false);
+  const loadRequestBlockedRef = useRef(false);
+  const lastDataSignatureRef = useRef<string>("");
+  const previousVisibleRangeRef = useRef<LogicalRange | null>(null);
+  const previousFirstBarTimeRef = useRef<string | null>(null);
+  const previousBarCountRef = useRef(0);
 
-  const allPrices = [
-    ...bars.flatMap((bar) => [
-      bar.openPrice,
-      bar.highPrice,
-      bar.lowPrice,
-      bar.closePrice,
-    ]),
-    ...overlayPrices,
-  ];
+  const candleData = useMemo(
+    () => bars.map(toCandlestickData),
+    [bars],
+  );
+  const volumeData = useMemo(
+    () => bars.map(toVolumeData),
+    [bars],
+  );
+  const markerData = useMemo(
+    () => overlays.map(toOrderMarker),
+    [overlays],
+  );
 
-  const rawMinPrice = Math.min(...allPrices);
-  const rawMaxPrice = Math.max(...allPrices);
-  const pricePadding =
-    rawMinPrice === rawMaxPrice
-      ? Math.max(rawMaxPrice * 0.01, 1)
-      : (rawMaxPrice - rawMinPrice) * 0.08;
-  const minPrice = rawMinPrice - pricePadding;
-  const maxPrice = rawMaxPrice + pricePadding;
-  const priceRange = Math.max(maxPrice - minPrice, 1);
-  const volumeMax = Math.max(...bars.map((bar) => bar.volume), 1);
-  const bodyWidth = Math.min(14, Math.max(chartWidth / bars.length - 2, 3));
-  const firstBarTime = new Date(bars[0].barTime).getTime();
-  const lastBarTime = new Date(bars[bars.length - 1].barTime).getTime();
-  const showDateInTicks =
-    new Date(bars[0].barTime).toDateString() !==
-    new Date(bars[bars.length - 1].barTime).toDateString();
+  useEffect(() => {
+    if (!containerRef.current) {
+      return;
+    }
 
-  const priceToY = (price: number) =>
-    priceChartBottom - ((price - minPrice) / priceRange) * PRICE_CHART_HEIGHT;
-  const volumeToY = (volume: number) =>
-    volumeChartBottom - (volume / volumeMax) * VOLUME_CHART_HEIGHT;
-  const xForIndex = (index: number) =>
-    chartLeft + ((index + 0.5) / bars.length) * chartWidth;
+    const chart = createChart(containerRef.current, {
+      autoSize: true,
+      height: 420,
+      layout: {
+        background: {
+          type: ColorType.Solid,
+          color: "transparent",
+        },
+        textColor: "hsl(var(--muted-foreground))",
+        attributionLogo: true,
+      },
+      localization: {
+        locale: "ko-KR",
+        priceFormatter: (price: number) =>
+          new Intl.NumberFormat("ko-KR", {
+            maximumFractionDigits: 0,
+          }).format(price),
+      },
+      rightPriceScale: {
+        borderColor: "hsl(var(--border))",
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.25,
+        },
+      },
+      timeScale: {
+        borderColor: "hsl(var(--border))",
+        barSpacing: 9,
+        minBarSpacing: 2.5,
+        rightOffset: 6,
+        tickMarkFormatter: formatTickMark,
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: {
+        vertLine: {
+          color: "hsl(var(--border))",
+          labelBackgroundColor: "hsl(var(--foreground))",
+        },
+        horzLine: {
+          color: "hsl(var(--border))",
+          labelBackgroundColor: "hsl(var(--foreground))",
+        },
+      },
+      grid: {
+        vertLines: {
+          color: "hsl(var(--border) / 0.45)",
+        },
+        horzLines: {
+          color: "hsl(var(--border) / 0.45)",
+        },
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: {
+          time: true,
+          price: false,
+        },
+        axisDoubleClickReset: {
+          time: true,
+          price: true,
+        },
+      },
+    });
 
-  const xForTime = (isoValue: string) => {
-    const time = new Date(isoValue).getTime();
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: "hsl(var(--loss))",
+      downColor: "hsl(var(--profit))",
+      borderVisible: false,
+      wickUpColor: "hsl(var(--loss))",
+      wickDownColor: "hsl(var(--profit))",
+      lastValueVisible: true,
+      priceLineVisible: true,
+    });
 
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceScaleId: "volume",
+      priceLineVisible: false,
+      lastValueVisible: false,
+      base: 0,
+    });
+
+    chart.priceScale("volume").applyOptions({
+      scaleMargins: {
+        top: 0.78,
+        bottom: 0,
+      },
+    });
+
+    const markerPlugin = createSeriesMarkers(candleSeries, []);
+
+    const handleVisibleRangeChange = (range: LogicalRange | null) => {
+      previousVisibleRangeRef.current = range;
+
+      if (
+        range === null ||
+        !onRequestOlderHistory ||
+        isLoadingMoreHistory ||
+        loadRequestBlockedRef.current
+      ) {
+        return;
+      }
+
+      const barsInfo = candleSeries.barsInLogicalRange(range);
+      if (barsInfo && barsInfo.barsBefore < HISTORY_LOAD_THRESHOLD) {
+        loadRequestBlockedRef.current = true;
+        onRequestOlderHistory();
+      }
+    };
+
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+
+    chartRef.current = chart;
+    candleSeriesRef.current = candleSeries;
+    volumeSeriesRef.current = volumeSeries;
+    markerPluginRef.current = markerPlugin;
+
+    return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(
+        handleVisibleRangeChange,
+      );
+      markerPluginRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      chartRef.current = null;
+      chart.remove();
+    };
+  }, [isLoadingMoreHistory, onRequestOlderHistory]);
+
+  useEffect(() => {
     if (
-      !Number.isFinite(time) ||
-      !Number.isFinite(firstBarTime) ||
-      !Number.isFinite(lastBarTime)
+      !chartRef.current ||
+      !candleSeriesRef.current ||
+      !volumeSeriesRef.current ||
+      !markerPluginRef.current
     ) {
-      return xForIndex(0);
+      return;
     }
 
-    if (lastBarTime <= firstBarTime) {
-      return xForIndex(findNearestBarIndex(bars, isoValue));
+    candleSeriesRef.current.setData(candleData);
+    volumeSeriesRef.current.setData(volumeData);
+    markerPluginRef.current.setMarkers(markerData);
+
+    const signature = buildDataSignature(bars);
+    const previousFirstBarTime = previousFirstBarTimeRef.current;
+    const previousBarCount = previousBarCountRef.current;
+    const firstBarTime = bars[0]?.barTime ?? null;
+    const prependedBarCount = countPrependedBars(bars, previousFirstBarTime);
+
+    if (!hasInitialViewRef.current) {
+      chartRef.current.timeScale().fitContent();
+      hasInitialViewRef.current = true;
+    } else if (
+      prependedBarCount > 0 &&
+      previousVisibleRangeRef.current !== null
+    ) {
+      chartRef.current.timeScale().setVisibleLogicalRange({
+        from: previousVisibleRangeRef.current.from + prependedBarCount,
+        to: previousVisibleRangeRef.current.to + prependedBarCount,
+      });
+    } else if (signature !== lastDataSignatureRef.current) {
+      const currentRange = chartRef.current.timeScale().getVisibleLogicalRange();
+      if (currentRange !== null) {
+        previousVisibleRangeRef.current = currentRange;
+      }
     }
 
-    const ratio = clamp((time - firstBarTime) / (lastBarTime - firstBarTime), 0, 1);
-    return chartLeft + ratio * chartWidth;
-  };
+    if (bars.length > previousBarCount || firstBarTime !== previousFirstBarTime) {
+      loadRequestBlockedRef.current = false;
+    }
+
+    lastDataSignatureRef.current = signature;
+    previousFirstBarTimeRef.current = firstBarTime;
+    previousBarCountRef.current = bars.length;
+  }, [bars, candleData, markerData, volumeData]);
+
+  useEffect(() => {
+    if (!isLoadingMoreHistory) {
+      loadRequestBlockedRef.current = false;
+    }
+  }, [isLoadingMoreHistory]);
 
   return (
     <div
@@ -96,273 +264,123 @@ export default function MinuteChart({
         className,
       )}
     >
-      <svg
-        viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
-        className="h-auto w-full"
-        role="img"
-        aria-label="분봉 차트와 주문 오버레이"
-      >
-        <rect
-          x={chartLeft}
-          y={chartTop}
-          width={chartWidth}
-          height={PRICE_CHART_HEIGHT}
-          rx="12"
-          fill="var(--card)"
-          stroke="var(--border)"
+      <div className="relative">
+        <div
+          ref={containerRef}
+          className="h-[420px] w-full overflow-hidden rounded-lg bg-card"
         />
-        <rect
-          x={chartLeft}
-          y={volumeChartTop}
-          width={chartWidth}
-          height={VOLUME_CHART_HEIGHT}
-          rx="12"
-          fill="var(--card)"
-          stroke="var(--border)"
-        />
-
-        {createPriceTicks(minPrice, maxPrice, GRID_TICK_COUNT).map((price) => {
-          const y = priceToY(price);
-          return (
-            <g key={`price-${price}`}>
-              <line
-                x1={chartLeft}
-                x2={chartLeft + chartWidth}
-                y1={y}
-                y2={y}
-                stroke="var(--border)"
-                strokeDasharray="4 6"
-              />
-              <text
-                x={chartLeft - 12}
-                y={y + 4}
-                fill="var(--muted-foreground)"
-                fontSize="12"
-                textAnchor="end"
-              >
-                {formatNumber(Math.round(price))}
-              </text>
-            </g>
-          );
-        })}
-
-        {timeTickIndexes.map((index) => {
-          const x = xForIndex(index);
-          return (
-            <g key={`time-${bars[index].barTime}`}>
-              <line
-                x1={x}
-                x2={x}
-                y1={chartTop}
-                y2={priceChartBottom}
-                stroke="var(--border)"
-                strokeDasharray="3 8"
-              />
-              <text
-                x={x}
-                y={VIEWBOX_HEIGHT - MARGIN_BOTTOM + 18}
-                fill="var(--muted-foreground)"
-                fontSize="12"
-                textAnchor="middle"
-              >
-                {formatTimeLabel(bars[index].barTime, showDateInTicks)}
-              </text>
-            </g>
-          );
-        })}
-
-        {bars.map((bar, index) => {
-          const x = xForIndex(index);
-          const openY = priceToY(bar.openPrice);
-          const closeY = priceToY(bar.closePrice);
-          const highY = priceToY(bar.highPrice);
-          const lowY = priceToY(bar.lowPrice);
-          const volumeY = volumeToY(bar.volume);
-          const bodyTop = Math.min(openY, closeY);
-          const bodyHeight = Math.max(Math.abs(openY - closeY), 1.5);
-          const isUp = bar.closePrice >= bar.openPrice;
-          const candleColor = isUp ? "var(--loss)" : "var(--profit)";
-
-          return (
-            <g key={bar.barTime}>
-              <line
-                x1={x}
-                x2={x}
-                y1={highY}
-                y2={lowY}
-                stroke={candleColor}
-                strokeWidth="1.5"
-              />
-              <rect
-                x={x - bodyWidth / 2}
-                y={bodyTop}
-                width={bodyWidth}
-                height={bodyHeight}
-                rx="1.5"
-                fill={candleColor}
-                opacity={isUp ? 0.85 : 0.95}
-              />
-              <rect
-                x={x - bodyWidth / 2}
-                y={volumeY}
-                width={bodyWidth}
-                height={Math.max(volumeChartBottom - volumeY, 1)}
-                rx="1.5"
-                fill={candleColor}
-                opacity="0.35"
-              />
-            </g>
-          );
-        })}
-
-        {overlays.map((overlay) => {
-          const x = xForTime(overlay.filledAt ?? overlay.requestedAt);
-          const price = getOverlayPrice(overlay, bars);
-          const y = price === null ? priceChartBottom - 12 : priceToY(price);
-          const color = overlay.side === "BUY" ? "var(--loss)" : "var(--profit)";
-          const filled = isFilledOrder(overlay.orderStatus);
-
-          return (
-            <g key={overlay.tradeOrderId}>
-              <line
-                x1={x}
-                x2={x}
-                y1={chartTop}
-                y2={priceChartBottom}
-                stroke={color}
-                strokeWidth="1"
-                strokeDasharray="4 5"
-                opacity="0.4"
-              />
-              <path
-                d={buildMarkerPath(x, y, overlay.side === "BUY" ? "up" : "down")}
-                fill={filled ? color : "var(--card)"}
-                stroke={color}
-                strokeWidth="2"
-              />
-              <text
-                x={x}
-                y={overlay.side === "BUY" ? y - 12 : y + 22}
-                fill={color}
-                fontSize="11"
-                fontWeight="600"
-                textAnchor="middle"
-              >
-                {overlay.side}
-              </text>
-            </g>
-          );
-        })}
-
-        <text
-          x={chartLeft}
-          y={VIEWBOX_HEIGHT - 12}
-          fill="var(--muted-foreground)"
-          fontSize="12"
-        >
-          주문 마커: 매수는 위 삼각형, 매도는 아래 삼각형, 미체결 주문은 속이 빈 형태로 표시됩니다.
-        </text>
-      </svg>
+        <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-2">
+          <span className="rounded-full bg-card/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm ring-1 ring-border/60 backdrop-blur">
+            휠로 확대/축소, 드래그로 이동
+          </span>
+          {isLoadingMoreHistory && (
+            <span className="rounded-full bg-card/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm ring-1 ring-border/60 backdrop-blur">
+              과거 데이터 확장 중
+            </span>
+          )}
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        매수 마커는 위 화살표, 매도 마커는 아래 화살표로 표시됩니다. 차트
+        왼쪽 끝으로 이동하면 과거 구간을 자동으로 더 불러옵니다.
+      </p>
     </div>
   );
 }
 
-function createPriceTicks(minPrice: number, maxPrice: number, count: number) {
-  if (count <= 1) {
-    return [maxPrice];
-  }
-
-  const ticks: number[] = [];
-  const step = (maxPrice - minPrice) / (count - 1);
-
-  for (let index = 0; index < count; index += 1) {
-    ticks.push(maxPrice - step * index);
-  }
-
-  return ticks;
+function toCandlestickData(bar: MinuteBar): CandlestickData<UTCTimestamp> {
+  return {
+    time: toUtcTimestamp(bar.barTime),
+    open: bar.openPrice,
+    high: bar.highPrice,
+    low: bar.lowPrice,
+    close: bar.closePrice,
+  };
 }
 
-function createTimeTickIndexes(length: number, count: number) {
-  if (length <= 1) {
-    return [0];
-  }
-
-  const tickIndexes = new Set<number>([0, length - 1]);
-
-  for (let index = 1; index < count - 1; index += 1) {
-    tickIndexes.add(Math.round(((length - 1) * index) / (count - 1)));
-  }
-
-  return Array.from(tickIndexes).sort((left, right) => left - right);
+function toVolumeData(bar: MinuteBar): HistogramData<UTCTimestamp> {
+  const isUp = bar.closePrice >= bar.openPrice;
+  return {
+    time: toUtcTimestamp(bar.barTime),
+    value: bar.volume,
+    color: isUp ? "hsl(var(--loss) / 0.35)" : "hsl(var(--profit) / 0.35)",
+  };
 }
 
-function formatTimeLabel(value: string, showDate: boolean) {
-  const date = new Date(value);
+function toOrderMarker(overlay: ChartOrderOverlay): SeriesMarker<UTCTimestamp> {
+  const markerTime = toUtcTimestamp(overlay.filledAt ?? overlay.requestedAt);
+  const side = overlay.side === "BUY" ? "BUY" : "SELL";
+  const isBuy = side === "BUY";
+  return {
+    time: markerTime,
+    position: isBuy ? "belowBar" : "aboveBar",
+    shape: isBuy ? "arrowUp" : "arrowDown",
+    color: isBuy ? "hsl(var(--loss))" : "hsl(var(--profit))",
+    text: side,
+  };
+}
 
-  if (Number.isNaN(date.getTime())) {
-    return "--:--";
+function toUtcTimestamp(isoValue: string): UTCTimestamp {
+  return Math.floor(new Date(isoValue).getTime() / 1000) as UTCTimestamp;
+}
+
+function formatTickMark(time: Time) {
+  const date = toDate(time);
+  if (!date) {
+    return null;
   }
 
   const formatter = new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
-    month: showDate ? "2-digit" : undefined,
-    day: showDate ? "2-digit" : undefined,
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
 
-  return formatter.format(date).replace(" ", "\u00A0");
+  const parts = formatter.formatToParts(date);
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "";
+
+  return `${month}.${day} ${hour}:${minute}`;
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function buildMarkerPath(x: number, y: number, direction: "up" | "down") {
-  const size = 8;
-
-  if (direction === "up") {
-    return `M ${x} ${y - size} L ${x + size} ${y + size} L ${x - size} ${y + size} Z`;
+function toDate(time: Time): Date | null {
+  if (typeof time === "number") {
+    return new Date(time * 1000);
   }
-
-  return `M ${x} ${y + size} L ${x + size} ${y - size} L ${x - size} ${y - size} Z`;
-}
-
-function isFilledOrder(status: string) {
-  return status === "filled" || status === "partial";
-}
-
-function getOverlayPrice(overlay: ChartOrderOverlay, bars: MinuteBar[]) {
-  if (overlay.avgFilledPrice !== null) {
-    return overlay.avgFilledPrice;
+  if (typeof time === "string") {
+    return new Date(time);
   }
-
-  if (overlay.requestedPrice !== null) {
-    return overlay.requestedPrice;
+  if (
+    typeof time === "object" &&
+    typeof time.year === "number" &&
+    typeof time.month === "number" &&
+    typeof time.day === "number"
+  ) {
+    return new Date(Date.UTC(time.year, time.month - 1, time.day));
   }
-
-  const nearestBar = bars[findNearestBarIndex(bars, overlay.filledAt ?? overlay.requestedAt)];
-  return nearestBar?.closePrice ?? null;
+  return null;
 }
 
-function findNearestBarIndex(bars: MinuteBar[], isoValue: string) {
-  const targetTime = new Date(isoValue).getTime();
+function buildDataSignature(bars: MinuteBar[]) {
+  const first = bars[0]?.barTime ?? "";
+  const last = bars[bars.length - 1]?.barTime ?? "";
+  return `${bars.length}:${first}:${last}`;
+}
 
-  if (!Number.isFinite(targetTime) || bars.length === 0) {
+function countPrependedBars(
+  bars: MinuteBar[],
+  previousFirstBarTime: string | null,
+) {
+  if (!previousFirstBarTime || bars.length === 0) {
     return 0;
   }
-
-  let nearestIndex = 0;
-  let nearestGap = Number.POSITIVE_INFINITY;
-
-  for (let index = 0; index < bars.length; index += 1) {
-    const gap = Math.abs(new Date(bars[index].barTime).getTime() - targetTime);
-    if (gap < nearestGap) {
-      nearestGap = gap;
-      nearestIndex = index;
-    }
-  }
-
-  return nearestIndex;
+  const previousStartIndex = bars.findIndex(
+    (bar) => bar.barTime === previousFirstBarTime,
+  );
+  return previousStartIndex > 0 ? previousStartIndex : 0;
 }

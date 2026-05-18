@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import MinuteChart from "@/components/chart/MinuteChart";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +60,13 @@ export default function ChartPage() {
   });
   const [filters, setFilters] = useState<ChartFilters>(createInitialFilters);
   const [appliedFilters, setAppliedFilters] = useState<ChartFilters | null>(null);
+  const [loadedRange, setLoadedRange] = useState<ChartDateRange | null>(null);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const [canLoadOlderHistory, setCanLoadOlderHistory] = useState(true);
+  const historySnapshotRef = useRef<{
+    earliestBarTime: string | null;
+    barCount: number;
+  } | null>(null);
 
   // 페이지 진입 시 첫 종목 + 오늘 날짜로 자동 조회.
   useEffect(() => {
@@ -80,24 +93,36 @@ export default function ChartPage() {
     setAppliedFilters(next);
   };
 
-  const appliedRange = appliedFilters ? createSevenDayRange(appliedFilters.date) : null;
+  useEffect(() => {
+    if (!appliedFilters) {
+      setLoadedRange(null);
+      setIsLoadingMoreHistory(false);
+      setCanLoadOlderHistory(true);
+      historySnapshotRef.current = null;
+      return;
+    }
+    setLoadedRange(createSevenDayRange(appliedFilters.date));
+    setIsLoadingMoreHistory(false);
+    setCanLoadOlderHistory(true);
+    historySnapshotRef.current = null;
+  }, [appliedFilters]);
 
   const minuteBarsQuery = useMinuteBars(
     {
       symbolCode: appliedFilters?.symbolCode ?? "",
-      dateFrom: appliedRange?.dateFrom ?? "",
-      dateTo: appliedRange?.dateTo ?? "",
+      dateFrom: loadedRange?.dateFrom ?? "",
+      dateTo: loadedRange?.dateTo ?? "",
     },
-    shouldFetch,
+    shouldFetch && loadedRange !== null,
   );
   const orderOverlaysQuery = useOrderOverlays(
     {
       symbolCode: appliedFilters?.symbolCode ?? "",
-      dateFrom: appliedRange?.dateFrom ?? "",
-      dateTo: appliedRange?.dateTo ?? "",
+      dateFrom: loadedRange?.dateFrom ?? "",
+      dateTo: loadedRange?.dateTo ?? "",
       strategyInstanceId: selectedInstanceId,
     },
-    shouldFetch,
+    shouldFetch && loadedRange !== null,
   );
 
   const bars = minuteBarsQuery.data?.bars ?? [];
@@ -107,6 +132,57 @@ export default function ChartPage() {
     (minuteBarsQuery.isFetching && !minuteBarsQuery.isPending) ||
     (orderOverlaysQuery.isFetching && !orderOverlaysQuery.isPending);
   const canSubmit = filters.symbolCode.trim() !== "" && filters.date !== "";
+
+  useEffect(() => {
+    if (!isLoadingMoreHistory || minuteBarsQuery.isFetching) {
+      return;
+    }
+
+    const snapshot = historySnapshotRef.current;
+    const nextBars = minuteBarsQuery.data?.bars ?? [];
+    const nextEarliestBarTime = nextBars[0]?.barTime ?? null;
+    const nextBarCount = nextBars.length;
+    const expanded =
+      snapshot === null ||
+      snapshot.earliestBarTime !== nextEarliestBarTime ||
+      snapshot.barCount !== nextBarCount;
+
+    setCanLoadOlderHistory(expanded);
+    setIsLoadingMoreHistory(false);
+    historySnapshotRef.current = null;
+  }, [isLoadingMoreHistory, minuteBarsQuery.data, minuteBarsQuery.isFetching]);
+
+  useEffect(() => {
+    if (!isLoadingMoreHistory || !minuteBarsQuery.error) {
+      return;
+    }
+    setIsLoadingMoreHistory(false);
+    historySnapshotRef.current = null;
+  }, [isLoadingMoreHistory, minuteBarsQuery.error]);
+
+  const requestOlderHistory = () => {
+    if (
+      !loadedRange ||
+      minuteBarsQuery.isFetching ||
+      isLoadingMoreHistory ||
+      !canLoadOlderHistory
+    ) {
+      return;
+    }
+    historySnapshotRef.current = {
+      earliestBarTime: bars[0]?.barTime ?? null,
+      barCount: bars.length,
+    };
+    setIsLoadingMoreHistory(true);
+    setLoadedRange((currentRange) =>
+      currentRange === null
+        ? null
+        : {
+            ...currentRange,
+            dateFrom: shiftKstDate(currentRange.dateFrom, -7),
+          },
+    );
+  };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -274,6 +350,11 @@ export default function ChartPage() {
               <span>
                 전역 선택 인스턴스가 있으면 주문 오버레이에 기본 적용됩니다.
               </span>
+              {loadedRange && (
+                <span>
+                  차트 범위 {loadedRange.dateFrom} ~ {loadedRange.dateTo}
+                </span>
+              )}
               {selectableInstancesError ? (
                 <span className="text-destructive">
                   인스턴스 목록 조회 실패: {selectableInstancesError.message}
@@ -298,9 +379,9 @@ export default function ChartPage() {
               {appliedFilters && (
                 <div className="flex flex-wrap justify-end gap-2">
                   <Badge variant="outline">{appliedFilters.symbolCode}</Badge>
-                  {appliedRange && (
+                  {loadedRange && (
                     <Badge variant="outline">
-                      {appliedRange.dateFrom} ~ {appliedRange.dateTo}
+                      {loadedRange.dateFrom} ~ {loadedRange.dateTo}
                     </Badge>
                   )}
                   <Badge variant="outline">
@@ -361,7 +442,12 @@ export default function ChartPage() {
                   />
                 </div>
 
-                <MinuteChart bars={bars} overlays={overlays} />
+                <MinuteChart
+                  bars={bars}
+                  overlays={overlays}
+                  isLoadingMoreHistory={isLoadingMoreHistory}
+                  onRequestOlderHistory={requestOlderHistory}
+                />
 
                 {orderOverlaysQuery.error && (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
