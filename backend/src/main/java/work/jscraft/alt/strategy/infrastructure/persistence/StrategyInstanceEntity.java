@@ -60,6 +60,9 @@ public class StrategyInstanceEntity extends SoftDeletableUuidEntity {
     @Column(name = "cycle_minutes")
     private Integer cycleMinutes;
 
+    @Column(name = "schedule_dirty", nullable = false)
+    private boolean scheduleDirty;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "execution_config_override_json", columnDefinition = "jsonb")
     private JsonNode executionConfigOverrideJson;
@@ -140,6 +143,14 @@ public class StrategyInstanceEntity extends SoftDeletableUuidEntity {
 
     public void setCycleMinutes(Integer cycleMinutes) {
         this.cycleMinutes = cycleMinutes;
+    }
+
+    public boolean isScheduleDirty() {
+        return scheduleDirty;
+    }
+
+    public void setScheduleDirty(boolean scheduleDirty) {
+        this.scheduleDirty = scheduleDirty;
     }
 
     public JsonNode getExecutionConfigOverrideJson() {

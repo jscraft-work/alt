@@ -23,6 +23,7 @@ import work.jscraft.alt.common.error.OptimisticLockConflictException;
 import work.jscraft.alt.llm.infrastructure.persistence.LlmModelProfileEntity;
 import work.jscraft.alt.llm.infrastructure.persistence.LlmModelProfileRepository;
 import work.jscraft.alt.ops.application.AuditLogService;
+import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceRepository;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyTemplateEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyTemplateRepository;
 
@@ -34,14 +35,17 @@ public class StrategyTemplateService {
     private static final String TARGET_TYPE = "STRATEGY_TEMPLATE";
 
     private final StrategyTemplateRepository strategyTemplateRepository;
+    private final StrategyInstanceRepository strategyInstanceRepository;
     private final LlmModelProfileRepository llmModelProfileRepository;
     private final AuditLogService auditLogService;
 
     public StrategyTemplateService(
             StrategyTemplateRepository strategyTemplateRepository,
+            StrategyInstanceRepository strategyInstanceRepository,
             LlmModelProfileRepository llmModelProfileRepository,
             AuditLogService auditLogService) {
         this.strategyTemplateRepository = strategyTemplateRepository;
+        this.strategyInstanceRepository = strategyInstanceRepository;
         this.llmModelProfileRepository = llmModelProfileRepository;
         this.auditLogService = auditLogService;
     }
@@ -75,8 +79,12 @@ public class StrategyTemplateService {
         StrategyTemplateEntity entity = findStrategyTemplate(strategyTemplateId);
         assertVersion(request.version(), entity.getVersion());
         StrategyTemplateView before = toView(entity);
+        int previousCycleMinutes = entity.getDefaultCycleMinutes();
         apply(entity, request);
         StrategyTemplateView updated = toView(strategyTemplateRepository.saveAndFlush(entity));
+        if (previousCycleMinutes != updated.defaultCycleMinutes()) {
+            strategyInstanceRepository.markScheduleDirtyByStrategyTemplateIdAndCycleMinutesIsNull(entity.getId());
+        }
         auditLogService.recordUpdate(
                 actor,
                 TARGET_TYPE,

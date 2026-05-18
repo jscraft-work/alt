@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -99,7 +100,7 @@ class TradingCycleReconcilerTest {
 
         reconciler.reconcile();
 
-        verify(schedulerClient).scheduleIfNotExists(any(SchedulableInstance.class));
+        verify(schedulerClient, never()).scheduleIfNotExists(any(SchedulableInstance.class));
         verify(schedulerClient, never()).cancel(any());
     }
 
@@ -119,6 +120,51 @@ class TradingCycleReconcilerTest {
                 ArgumentCaptor.forClass(SchedulableInstance.class);
         verify(schedulerClient).scheduleIfNotExists(captor.capture());
         assertThat(captor.getValue().getTaskInstance().getData().cycleMinutes()).isEqualTo(5);
+    }
+
+    @Test
+    void dirtyInstanceWithChangedCycle_reschedulesAndClearsDirty() throws Exception {
+        StrategyInstanceEntity active = buildActiveInstance(10, 5);
+        active.setScheduleDirty(true);
+        when(repository.findByLifecycleStateAndAutoPausedReasonIsNull("active"))
+                .thenReturn(List.of(active));
+
+        @SuppressWarnings("unchecked")
+        ScheduledExecution<CycleScheduleData> existing =
+                (ScheduledExecution<CycleScheduleData>) mock(ScheduledExecution.class);
+        when(existing.getData()).thenReturn(new CycleScheduleData(active.getId(), 10));
+        when(schedulerClient.getScheduledExecutionsForTask(
+                TradingCycleSchedulerConfig.TASK_NAME, CycleScheduleData.class))
+                .thenReturn(List.of(existing));
+
+        reconciler.reconcile();
+
+        verify(schedulerClient).cancel(eq(
+                TaskInstanceId.of(TradingCycleSchedulerConfig.TASK_NAME, active.getId().toString())));
+        verify(schedulerClient, times(1)).scheduleIfNotExists(any(SchedulableInstance.class));
+        assertThat(active.isScheduleDirty()).isFalse();
+    }
+
+    @Test
+    void dirtyInstanceWithMatchingCycle_onlyClearsDirty() throws Exception {
+        StrategyInstanceEntity active = buildActiveInstance(10, null);
+        active.setScheduleDirty(true);
+        when(repository.findByLifecycleStateAndAutoPausedReasonIsNull("active"))
+                .thenReturn(List.of(active));
+
+        @SuppressWarnings("unchecked")
+        ScheduledExecution<CycleScheduleData> existing =
+                (ScheduledExecution<CycleScheduleData>) mock(ScheduledExecution.class);
+        when(existing.getData()).thenReturn(new CycleScheduleData(active.getId(), 10));
+        when(schedulerClient.getScheduledExecutionsForTask(
+                TradingCycleSchedulerConfig.TASK_NAME, CycleScheduleData.class))
+                .thenReturn(List.of(existing));
+
+        reconciler.reconcile();
+
+        verify(schedulerClient, never()).cancel(any());
+        verify(schedulerClient, never()).scheduleIfNotExists(any(SchedulableInstance.class));
+        assertThat(active.isScheduleDirty()).isFalse();
     }
 
     private StrategyInstanceEntity buildActiveInstance(int templateCycleMinutes, Integer instanceCycleMinutes) throws Exception {

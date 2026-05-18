@@ -121,6 +121,7 @@ public class StrategyInstanceService {
         entity.setBudgetAmount(request.budgetAmount());
         entity.setTradingModelProfile(tradingModelProfile);
         entity.setCycleMinutes(request.cycleMinutes());
+        entity.setScheduleDirty(false);
         entity.setExecutionConfigOverrideJson(copyJsonValue(request.executionConfigOverride()));
 
         strategyInstanceRepository.saveAndFlush(entity);
@@ -199,6 +200,7 @@ public class StrategyInstanceService {
         entity.setBudgetAmount(requestedBudgetAmount);
         entity.setTradingModelProfile(requestedTradingModelProfile);
         entity.setCycleMinutes(requestedCycleMinutes);
+        entity.setScheduleDirty(true);
         entity.setExecutionConfigOverrideJson(requestedExecutionConfig);
 
         StrategyInstanceView updated = toView(strategyInstanceRepository.saveAndFlush(entity));

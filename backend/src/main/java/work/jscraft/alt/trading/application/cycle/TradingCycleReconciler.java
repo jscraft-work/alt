@@ -1,8 +1,10 @@
 package work.jscraft.alt.trading.application.cycle;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,16 +52,20 @@ public class TradingCycleReconciler {
     public void reconcile() {
         List<StrategyInstanceEntity> activeInstances =
                 strategyInstanceRepository.findByLifecycleStateAndAutoPausedReasonIsNull(LIFECYCLE_ACTIVE);
+        List<ScheduledExecution<CycleScheduleData>> scheduled =
+                schedulerClient.getScheduledExecutionsForTask(
+                        TradingCycleSchedulerConfig.TASK_NAME, CycleScheduleData.class);
+        Map<UUID, ScheduledExecution<CycleScheduleData>> scheduledByInstanceId = new HashMap<>();
+        for (ScheduledExecution<CycleScheduleData> execution : scheduled) {
+            scheduledByInstanceId.put(execution.getData().instanceId(), execution);
+        }
 
         Set<UUID> activeIds = new HashSet<>();
         for (StrategyInstanceEntity instance : activeInstances) {
             activeIds.add(instance.getId());
-            schedule(instance);
+            reconcileSchedule(instance, scheduledByInstanceId.get(instance.getId()));
         }
 
-        List<ScheduledExecution<CycleScheduleData>> scheduled =
-                schedulerClient.getScheduledExecutionsForTask(
-                        TradingCycleSchedulerConfig.TASK_NAME, CycleScheduleData.class);
         for (ScheduledExecution<CycleScheduleData> exec : scheduled) {
             UUID instanceId = exec.getData().instanceId();
             if (!activeIds.contains(instanceId)) {
@@ -70,10 +76,35 @@ public class TradingCycleReconciler {
         }
     }
 
-    private void schedule(StrategyInstanceEntity instance) {
-        int cycleMinutes = instance.getCycleMinutes() != null
+    private void reconcileSchedule(
+            StrategyInstanceEntity instance,
+            ScheduledExecution<CycleScheduleData> existing) {
+        int cycleMinutes = effectiveCycleMinutes(instance);
+        if (instance.isScheduleDirty()) {
+            boolean needsReschedule = existing == null || existing.getData().cycleMinutes() != cycleMinutes;
+            if (needsReschedule) {
+                if (existing != null) {
+                    schedulerClient.cancel(
+                            TaskInstanceId.of(TradingCycleSchedulerConfig.TASK_NAME, instance.getId().toString()));
+                }
+                schedule(instance, cycleMinutes);
+                log.info("cycle schedule refreshed instance={} cycleMinutes={}", instance.getId(), cycleMinutes);
+            }
+            instance.setScheduleDirty(false);
+            return;
+        }
+        if (existing == null) {
+            schedule(instance, cycleMinutes);
+        }
+    }
+
+    private int effectiveCycleMinutes(StrategyInstanceEntity instance) {
+        return instance.getCycleMinutes() != null
                 ? instance.getCycleMinutes()
                 : instance.getStrategyTemplate().getDefaultCycleMinutes();
+    }
+
+    private void schedule(StrategyInstanceEntity instance, int cycleMinutes) {
         CycleScheduleData data = new CycleScheduleData(instance.getId(), cycleMinutes);
         boolean created = schedulerClient.scheduleIfNotExists(
                 TradingCycleSchedulerConfig.TRADING_CYCLE_TASK

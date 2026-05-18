@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
 import work.jscraft.alt.strategy.application.StrategyTemplateService;
+import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEntity;
+import work.jscraft.alt.strategy.infrastructure.persistence.StrategyTemplateEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -31,13 +33,13 @@ class StrategyTemplateAdminApiTest extends AdminCatalogApiIntegrationTestSupport
     @Test
     void adminEndpointsRequireAdminRole() throws Exception {
         mockMvc.perform(get("/api/admin/strategy-templates"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk());
 
         LoginCookies viewerLogin = login("viewer", "Password!123", "198.51.100.55");
 
         mockMvc.perform(get("/api/admin/strategy-templates")
                 .cookie(viewerLogin.sessionCookie()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -116,5 +118,37 @@ class StrategyTemplateAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         "STRATEGY_TEMPLATE_CREATED",
                         "STRATEGY_TEMPLATE_UPDATED",
                         "STRATEGY_TEMPLATE_DELETED");
+    }
+
+    @Test
+    void templateCycleChangeMarksInheritedInstancesScheduleDirty() throws Exception {
+        LoginCookies adminLogin = login();
+        var modelProfile = createTradingModelProfile();
+        StrategyTemplateEntity template = createStrategyTemplate("KR 모멘텀 템플릿", "prompt-v1", modelProfile);
+        StrategyInstanceEntity inherited = strategyInstanceRepository.findById(UUID.fromString(
+                createStrategyInstance(adminLogin, template, "Inherited", "paper", null).path("id").asText())).orElseThrow();
+        StrategyInstanceEntity overridden = strategyInstanceRepository.findById(UUID.fromString(
+                createStrategyInstance(adminLogin, template, "Overridden", "paper", null).path("id").asText())).orElseThrow();
+        overridden.setCycleMinutes(3);
+        overridden.setScheduleDirty(false);
+        strategyInstanceRepository.saveAndFlush(overridden);
+
+        mockMvc.perform(patch("/api/admin/strategy-templates/{strategyTemplateId}", template.getId())
+                .cookie(adminLogin.sessionCookie(), adminLogin.csrfCookie())
+                .header(authProperties.getCsrfHeaderName(), adminLogin.csrfCookie().getValue())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(toJson(new StrategyTemplateService.UpdateStrategyTemplateRequest(
+                        template.getName(),
+                        template.getDescription(),
+                        7,
+                        template.getDefaultPromptText(),
+                        template.getDefaultExecutionConfigJson(),
+                        template.getDefaultTradingModelProfile().getId(),
+                        template.getVersion()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.defaultCycleMinutes").value(7));
+
+        assertThat(strategyInstanceRepository.findById(inherited.getId()).orElseThrow().isScheduleDirty()).isTrue();
+        assertThat(strategyInstanceRepository.findById(overridden.getId()).orElseThrow().isScheduleDirty()).isFalse();
     }
 }

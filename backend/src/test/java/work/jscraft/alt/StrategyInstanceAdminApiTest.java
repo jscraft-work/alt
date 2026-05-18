@@ -110,6 +110,8 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
 
         JsonNode updated = objectMapper.readTree(updatedBody).path("data");
         long updatedVersion = updated.path("version").asLong();
+        StrategyInstanceEntity updatedEntity = strategyInstanceRepository.findById(UUID.fromString(strategyInstanceId)).orElseThrow();
+        assertThat(updatedEntity.isScheduleDirty()).isTrue();
 
         mockMvc.perform(get("/api/admin/strategy-instances")
                 .queryParam("lifecycleState", "draft")
@@ -172,6 +174,7 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
 
         StrategyInstanceEntity reloaded = strategyInstanceRepository.findById(UUID.fromString(strategyInstanceId)).orElseThrow();
         assertThat(reloaded.getTradingModelProfile()).isNull();
+        assertThat(reloaded.isScheduleDirty()).isFalse();
         assertThat(reloaded.getExecutionConfigOverrideJson()).isNull();
 
         String listBody = mockMvc.perform(get("/api/admin/strategy-instances")
