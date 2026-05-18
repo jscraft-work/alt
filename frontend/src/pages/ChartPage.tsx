@@ -63,6 +63,7 @@ export default function ChartPage() {
   const [loadedRange, setLoadedRange] = useState<ChartDateRange | null>(null);
   const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
   const [canLoadOlderHistory, setCanLoadOlderHistory] = useState(true);
+  const [focusedOverlayId, setFocusedOverlayId] = useState<string | null>(null);
   const historySnapshotRef = useRef<{
     earliestBarTime: string | null;
     barCount: number;
@@ -98,12 +99,14 @@ export default function ChartPage() {
       setLoadedRange(null);
       setIsLoadingMoreHistory(false);
       setCanLoadOlderHistory(true);
+      setFocusedOverlayId(null);
       historySnapshotRef.current = null;
       return;
     }
     setLoadedRange(createSevenDayRange(appliedFilters.date));
     setIsLoadingMoreHistory(false);
     setCanLoadOlderHistory(true);
+    setFocusedOverlayId(null);
     historySnapshotRef.current = null;
   }, [appliedFilters]);
 
@@ -127,6 +130,8 @@ export default function ChartPage() {
 
   const bars = minuteBarsQuery.data?.bars ?? [];
   const overlays = orderOverlaysQuery.data ?? [];
+  const focusedOverlay =
+    overlays.find((overlay) => overlay.tradeOrderId === focusedOverlayId) ?? null;
   const barSummary = bars.length > 0 ? summarizeBars(bars) : null;
   const isRefreshing =
     (minuteBarsQuery.isFetching && !minuteBarsQuery.isPending) ||
@@ -159,6 +164,18 @@ export default function ChartPage() {
     setIsLoadingMoreHistory(false);
     historySnapshotRef.current = null;
   }, [isLoadingMoreHistory, minuteBarsQuery.error]);
+
+  useEffect(() => {
+    if (!focusedOverlayId) {
+      return;
+    }
+    const exists = overlays.some(
+      (overlay) => overlay.tradeOrderId === focusedOverlayId,
+    );
+    if (!exists) {
+      setFocusedOverlayId(null);
+    }
+  }, [focusedOverlayId, overlays]);
 
   const requestOlderHistory = () => {
     if (
@@ -445,6 +462,7 @@ export default function ChartPage() {
                 <MinuteChart
                   bars={bars}
                   overlays={overlays}
+                  focusedOverlayId={focusedOverlayId}
                   isLoadingMoreHistory={isLoadingMoreHistory}
                   onRequestOlderHistory={requestOlderHistory}
                 />
@@ -486,6 +504,11 @@ export default function ChartPage() {
                 }
               />
             </div>
+            {focusedOverlay && (
+              <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                선택된 주문: {formatKstDateTime(focusedOverlay.filledAt ?? focusedOverlay.requestedAt)} / {focusedOverlay.side} / {formatKrw(focusedOverlay.avgFilledPrice ?? focusedOverlay.requestedPrice)}
+              </div>
+            )}
 
             {!appliedFilters ? (
               <StatePanel
@@ -529,7 +552,18 @@ export default function ChartPage() {
                   </TableHeader>
                   <TableBody>
                     {overlays.map((overlay) => (
-                      <TableRow key={overlay.tradeOrderId}>
+                      <TableRow
+                        key={overlay.tradeOrderId}
+                        data-state={
+                          overlay.tradeOrderId === focusedOverlayId
+                            ? "selected"
+                            : undefined
+                        }
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setFocusedOverlayId(overlay.tradeOrderId);
+                        }}
+                      >
                         <TableCell>
                           {formatKstDateTime(overlay.filledAt ?? overlay.requestedAt)}
                         </TableCell>

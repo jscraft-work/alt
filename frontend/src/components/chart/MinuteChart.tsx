@@ -25,6 +25,7 @@ const HISTORY_LOAD_THRESHOLD = 24;
 interface MinuteChartProps {
   bars: MinuteBar[];
   overlays: ChartOrderOverlay[];
+  focusedOverlayId?: string | null;
   className?: string;
   isLoadingMoreHistory?: boolean;
   onRequestOlderHistory?: () => void;
@@ -33,6 +34,7 @@ interface MinuteChartProps {
 export default function MinuteChart({
   bars,
   overlays,
+  focusedOverlayId = null,
   className,
   isLoadingMoreHistory = false,
   onRequestOlderHistory,
@@ -59,8 +61,8 @@ export default function MinuteChart({
     [bars],
   );
   const markerData = useMemo(
-    () => buildOrderMarkers(bars, overlays),
-    [bars, overlays],
+    () => buildOrderMarkers(bars, overlays, focusedOverlayId),
+    [bars, overlays, focusedOverlayId],
   );
 
   useEffect(() => {
@@ -99,7 +101,9 @@ export default function MinuteChart({
         borderColor: palette.border,
         barSpacing: 9,
         minBarSpacing: 2.5,
-        rightOffset: 6,
+        rightOffset: 0,
+        fixLeftEdge: true,
+        fixRightEdge: true,
         tickMarkFormatter: formatTickMark,
         timeVisible: true,
         secondsVisible: false,
@@ -166,7 +170,9 @@ export default function MinuteChart({
       },
     });
 
-    const markerPlugin = createSeriesMarkers(candleSeries, []);
+    const markerPlugin = createSeriesMarkers(candleSeries, [], {
+      zOrder: "top",
+    });
 
     const handleVisibleRangeChange = (range: LogicalRange | null) => {
       previousVisibleRangeRef.current = range;
@@ -259,6 +265,37 @@ export default function MinuteChart({
     }
   }, [isLoadingMoreHistory]);
 
+  useEffect(() => {
+    if (!chartRef.current || !focusedOverlayId || bars.length === 0) {
+      return;
+    }
+
+    const focusTarget = resolveFocusedOverlayTarget(
+      bars,
+      overlays,
+      focusedOverlayId,
+    );
+    if (!focusTarget) {
+      return;
+    }
+
+    const currentRange = chartRef.current.timeScale().getVisibleLogicalRange();
+    const windowSize =
+      currentRange === null
+        ? Math.min(Math.max(bars.length - 1, 30), 180)
+        : Math.max(currentRange.to - currentRange.from, 30);
+    const targetIndex = focusTarget.barIndex;
+    const maxTo = Math.max(bars.length - 1, 0);
+    const maxFrom = Math.max(maxTo - windowSize, 0);
+    const nextFrom = clamp(targetIndex - windowSize / 2, 0, maxFrom);
+    const nextTo = Math.min(nextFrom + windowSize, maxTo);
+
+    chartRef.current.timeScale().setVisibleLogicalRange({
+      from: nextFrom,
+      to: nextTo,
+    });
+  }, [bars, overlays, focusedOverlayId]);
+
   return (
     <div
       className={cn(
@@ -283,9 +320,9 @@ export default function MinuteChart({
         </div>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        매수 마커는 위 화살표, 매도 마커는 아래 화살표로 표시됩니다. 같은 분에
-        주문이 겹치면 xN으로 묶어 표시합니다. 차트 왼쪽 끝으로 이동하면 과거
-        구간을 자동으로 더 불러옵니다.
+        매수 마커는 위 화살표, 매도 마커는 아래 화살표로 표시됩니다. 우측 주문
+        목록에서 항목을 누르면 해당 시점으로 차트를 이동합니다. 차트 왼쪽 끝으로
+        이동하면 과거 구간을 자동으로 더 불러옵니다.
       </p>
     </div>
   );
@@ -429,63 +466,37 @@ function normalizeCssColor(input: string) {
 function buildOrderMarkers(
   bars: MinuteBar[],
   overlays: ChartOrderOverlay[],
+  focusedOverlayId: string | null,
 ): SeriesMarker<UTCTimestamp>[] {
   if (bars.length === 0 || overlays.length === 0) {
     return [];
   }
 
-  const barTimes = bars.map((bar) => toUtcTimestamp(bar.barTime));
-  const grouped = new Map<string, MarkerAggregate>();
+  const barLookup = buildBarLookup(bars);
+  const duplicates = new Map<string, number>();
 
-  for (const overlay of overlays) {
-    const eventTime = toUtcTimestamp(overlay.filledAt ?? overlay.requestedAt);
-    const snappedTime = findBarTimeAtOrBefore(barTimes, eventTime);
-    if (snappedTime === null) {
-      continue;
-    }
-
-    const side = overlay.side === "BUY" ? "BUY" : "SELL";
-    const key = `${snappedTime}:${side}`;
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.count += 1;
-      existing.latestEventTime =
-        (Math.max(existing.latestEventTime, eventTime) as UTCTimestamp);
-      continue;
-    }
-
-    grouped.set(key, {
-      time: snappedTime,
-      side,
-      count: 1,
-      latestEventTime: eventTime,
-    });
-  }
-
-  return Array.from(grouped.values())
-    .sort((left, right) => {
-      if (left.time !== right.time) {
-        return left.time - right.time;
+  return overlays
+    .map((overlay) => {
+      const placement = resolveOverlayPlacement(barLookup, overlay);
+      if (!placement) {
+        return null;
       }
-      if (left.side !== right.side) {
-        return left.side === "SELL" ? -1 : 1;
-      }
-      return left.latestEventTime - right.latestEventTime;
+
+      const side = overlay.side === "BUY" ? "BUY" : "SELL";
+      const duplicateKey = `${placement.time}:${side}:${placement.basePrice}`;
+      const duplicateIndex = duplicates.get(duplicateKey) ?? 0;
+      duplicates.set(duplicateKey, duplicateIndex + 1);
+
+      return toOrderMarker(
+        overlay,
+        side,
+        placement.time,
+        placement.basePrice,
+        duplicateIndex,
+        overlay.tradeOrderId === focusedOverlayId,
+      );
     })
-    .map(toOrderMarker);
-}
-
-function toOrderMarker(
-  marker: MarkerAggregate,
-): SeriesMarker<UTCTimestamp> {
-  const isBuy = marker.side === "BUY";
-  return {
-    time: marker.time,
-    position: isBuy ? "belowBar" : "aboveBar",
-    shape: isBuy ? "arrowUp" : "arrowDown",
-    color: isBuy ? "#3498db" : "#e74c3c",
-    text: marker.count > 1 ? `${marker.side} x${marker.count}` : marker.side,
-  };
+    .filter((marker): marker is SeriesMarker<UTCTimestamp> => marker !== null);
 }
 
 function findBarTimeAtOrBefore(
@@ -510,9 +521,90 @@ function findBarTimeAtOrBefore(
   return candidate;
 }
 
-interface MarkerAggregate {
-  time: UTCTimestamp;
-  side: "BUY" | "SELL";
-  count: number;
-  latestEventTime: UTCTimestamp;
+function buildBarLookup(bars: MinuteBar[]) {
+  const entries = bars.map((bar, index) => {
+    const time = toUtcTimestamp(bar.barTime);
+    return {
+      time,
+      index,
+      bar,
+    };
+  });
+  return {
+    entries,
+    times: entries.map((entry) => entry.time),
+  };
+}
+
+function resolveOverlayPlacement(
+  barLookup: ReturnType<typeof buildBarLookup>,
+  overlay: ChartOrderOverlay,
+) {
+  const eventTime = toUtcTimestamp(overlay.filledAt ?? overlay.requestedAt);
+  const snappedTime = findBarTimeAtOrBefore(barLookup.times, eventTime);
+  if (snappedTime === null) {
+    return null;
+  }
+
+  const entry = barLookup.entries.find((candidate) => candidate.time === snappedTime);
+  if (!entry) {
+    return null;
+  }
+
+  const requestedPrice = overlay.avgFilledPrice ?? overlay.requestedPrice;
+  const fallbackPrice =
+    overlay.side === "BUY" ? entry.bar.lowPrice : entry.bar.highPrice;
+
+  return {
+    time: snappedTime,
+    barIndex: entry.index,
+    basePrice: requestedPrice ?? fallbackPrice,
+  };
+}
+
+function resolveFocusedOverlayTarget(
+  bars: MinuteBar[],
+  overlays: ChartOrderOverlay[],
+  focusedOverlayId: string,
+) {
+  const barLookup = buildBarLookup(bars);
+  const overlay = overlays.find(
+    (candidate) => candidate.tradeOrderId === focusedOverlayId,
+  );
+  if (!overlay) {
+    return null;
+  }
+  return resolveOverlayPlacement(barLookup, overlay);
+}
+
+function toOrderMarker(
+  overlay: ChartOrderOverlay,
+  side: "BUY" | "SELL",
+  time: UTCTimestamp,
+  basePrice: number,
+  duplicateIndex: number,
+  isFocused: boolean,
+): SeriesMarker<UTCTimestamp> {
+  const isBuy = side === "BUY";
+  const priceStep = Math.max(Math.abs(basePrice) * 0.0015, 1);
+  const adjustedPrice = isBuy
+    ? Math.max(basePrice - duplicateIndex * priceStep, 0)
+    : basePrice + duplicateIndex * priceStep;
+
+  return {
+    id: overlay.tradeOrderId,
+    time,
+    position: isBuy ? "atPriceBottom" : "atPriceTop",
+    price: adjustedPrice,
+    shape: isBuy ? "arrowUp" : "arrowDown",
+    color: isFocused
+      ? (isBuy ? "#1d4ed8" : "#b91c1c")
+      : (isBuy ? "#3498db" : "#e74c3c"),
+    size: isFocused ? 2 : 1,
+    text: isFocused ? side : undefined,
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
