@@ -68,6 +68,8 @@ export default function MinuteChart({
       return;
     }
 
+    const palette = resolveChartPalette(containerRef.current);
+
     const chart = createChart(containerRef.current, {
       autoSize: true,
       height: 420,
@@ -76,7 +78,7 @@ export default function MinuteChart({
           type: ColorType.Solid,
           color: "transparent",
         },
-        textColor: "hsl(var(--muted-foreground))",
+        textColor: palette.mutedForeground,
         attributionLogo: true,
       },
       localization: {
@@ -87,14 +89,14 @@ export default function MinuteChart({
           }).format(price),
       },
       rightPriceScale: {
-        borderColor: "hsl(var(--border))",
+        borderColor: palette.border,
         scaleMargins: {
           top: 0.1,
           bottom: 0.25,
         },
       },
       timeScale: {
-        borderColor: "hsl(var(--border))",
+        borderColor: palette.border,
         barSpacing: 9,
         minBarSpacing: 2.5,
         rightOffset: 6,
@@ -104,20 +106,20 @@ export default function MinuteChart({
       },
       crosshair: {
         vertLine: {
-          color: "hsl(var(--border))",
-          labelBackgroundColor: "hsl(var(--foreground))",
+          color: palette.border,
+          labelBackgroundColor: palette.foreground,
         },
         horzLine: {
-          color: "hsl(var(--border))",
-          labelBackgroundColor: "hsl(var(--foreground))",
+          color: palette.border,
+          labelBackgroundColor: palette.foreground,
         },
       },
       grid: {
         vertLines: {
-          color: "hsl(var(--border) / 0.45)",
+          color: withAlpha(palette.border, 0.45),
         },
         horzLines: {
-          color: "hsl(var(--border) / 0.45)",
+          color: withAlpha(palette.border, 0.45),
         },
       },
       handleScroll: {
@@ -141,11 +143,11 @@ export default function MinuteChart({
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "hsl(var(--loss))",
-      downColor: "hsl(var(--profit))",
+      upColor: palette.loss,
+      downColor: palette.profit,
       borderVisible: false,
-      wickUpColor: "hsl(var(--loss))",
-      wickDownColor: "hsl(var(--profit))",
+      wickUpColor: palette.loss,
+      wickDownColor: palette.profit,
       lastValueVisible: true,
       priceLineVisible: true,
     });
@@ -303,7 +305,7 @@ function toVolumeData(bar: MinuteBar): HistogramData<UTCTimestamp> {
   return {
     time: toUtcTimestamp(bar.barTime),
     value: bar.volume,
-    color: isUp ? "hsl(var(--loss) / 0.35)" : "hsl(var(--profit) / 0.35)",
+    color: isUp ? "rgba(52, 152, 219, 0.35)" : "rgba(231, 76, 60, 0.35)",
   };
 }
 
@@ -315,7 +317,7 @@ function toOrderMarker(overlay: ChartOrderOverlay): SeriesMarker<UTCTimestamp> {
     time: markerTime,
     position: isBuy ? "belowBar" : "aboveBar",
     shape: isBuy ? "arrowUp" : "arrowDown",
-    color: isBuy ? "hsl(var(--loss))" : "hsl(var(--profit))",
+    color: isBuy ? "#3498db" : "#e74c3c",
     text: side,
   };
 }
@@ -383,4 +385,43 @@ function countPrependedBars(
     (bar) => bar.barTime === previousFirstBarTime,
   );
   return previousStartIndex > 0 ? previousStartIndex : 0;
+}
+
+function resolveChartPalette(container: HTMLElement) {
+  return {
+    border: resolveCssColor(container, "--border", "#d9d9d9"),
+    foreground: resolveCssColor(container, "--foreground", "#111827"),
+    mutedForeground: resolveCssColor(container, "--muted-foreground", "#6b7280"),
+    profit: resolveCssColor(container, "--profit", "#e74c3c"),
+    loss: resolveCssColor(container, "--loss", "#3498db"),
+  };
+}
+
+function resolveCssColor(
+  container: HTMLElement,
+  token: string,
+  fallback: string,
+) {
+  const rootStyles = getComputedStyle(document.documentElement);
+  const rawToken = rootStyles.getPropertyValue(token).trim();
+  if (!rawToken) {
+    return fallback;
+  }
+
+  const probe = document.createElement("span");
+  probe.style.color = rawToken;
+  probe.style.display = "none";
+  container.appendChild(probe);
+  const resolved = getComputedStyle(probe).color;
+  container.removeChild(probe);
+  return resolved || fallback;
+}
+
+function withAlpha(rgbColor: string, alpha: number) {
+  const match = rgbColor.match(/\d+(\.\d+)?/g);
+  if (!match || match.length < 3) {
+    return rgbColor;
+  }
+  const [r, g, b] = match;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
