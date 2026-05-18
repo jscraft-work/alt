@@ -59,8 +59,8 @@ export default function MinuteChart({
     [bars],
   );
   const markerData = useMemo(
-    () => overlays.map(toOrderMarker),
-    [overlays],
+    () => buildOrderMarkers(bars, overlays),
+    [bars, overlays],
   );
 
   useEffect(() => {
@@ -283,8 +283,9 @@ export default function MinuteChart({
         </div>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        매수 마커는 위 화살표, 매도 마커는 아래 화살표로 표시됩니다. 차트
-        왼쪽 끝으로 이동하면 과거 구간을 자동으로 더 불러옵니다.
+        매수 마커는 위 화살표, 매도 마커는 아래 화살표로 표시됩니다. 같은 분에
+        주문이 겹치면 xN으로 묶어 표시합니다. 차트 왼쪽 끝으로 이동하면 과거
+        구간을 자동으로 더 불러옵니다.
       </p>
     </div>
   );
@@ -306,19 +307,6 @@ function toVolumeData(bar: MinuteBar): HistogramData<UTCTimestamp> {
     time: toUtcTimestamp(bar.barTime),
     value: bar.volume,
     color: isUp ? "rgba(52, 152, 219, 0.35)" : "rgba(231, 76, 60, 0.35)",
-  };
-}
-
-function toOrderMarker(overlay: ChartOrderOverlay): SeriesMarker<UTCTimestamp> {
-  const markerTime = toUtcTimestamp(overlay.filledAt ?? overlay.requestedAt);
-  const side = overlay.side === "BUY" ? "BUY" : "SELL";
-  const isBuy = side === "BUY";
-  return {
-    time: markerTime,
-    position: isBuy ? "belowBar" : "aboveBar",
-    shape: isBuy ? "arrowUp" : "arrowDown",
-    color: isBuy ? "#3498db" : "#e74c3c",
-    text: side,
   };
 }
 
@@ -436,4 +424,95 @@ function normalizeCssColor(input: string) {
   const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
   const alpha = Number((a / 255).toFixed(4));
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function buildOrderMarkers(
+  bars: MinuteBar[],
+  overlays: ChartOrderOverlay[],
+): SeriesMarker<UTCTimestamp>[] {
+  if (bars.length === 0 || overlays.length === 0) {
+    return [];
+  }
+
+  const barTimes = bars.map((bar) => toUtcTimestamp(bar.barTime));
+  const grouped = new Map<string, MarkerAggregate>();
+
+  for (const overlay of overlays) {
+    const eventTime = toUtcTimestamp(overlay.filledAt ?? overlay.requestedAt);
+    const snappedTime = findBarTimeAtOrBefore(barTimes, eventTime);
+    if (snappedTime === null) {
+      continue;
+    }
+
+    const side = overlay.side === "BUY" ? "BUY" : "SELL";
+    const key = `${snappedTime}:${side}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.latestEventTime =
+        (Math.max(existing.latestEventTime, eventTime) as UTCTimestamp);
+      continue;
+    }
+
+    grouped.set(key, {
+      time: snappedTime,
+      side,
+      count: 1,
+      latestEventTime: eventTime,
+    });
+  }
+
+  return Array.from(grouped.values())
+    .sort((left, right) => {
+      if (left.time !== right.time) {
+        return left.time - right.time;
+      }
+      if (left.side !== right.side) {
+        return left.side === "SELL" ? -1 : 1;
+      }
+      return left.latestEventTime - right.latestEventTime;
+    })
+    .map(toOrderMarker);
+}
+
+function toOrderMarker(
+  marker: MarkerAggregate,
+): SeriesMarker<UTCTimestamp> {
+  const isBuy = marker.side === "BUY";
+  return {
+    time: marker.time,
+    position: isBuy ? "belowBar" : "aboveBar",
+    shape: isBuy ? "arrowUp" : "arrowDown",
+    color: isBuy ? "#3498db" : "#e74c3c",
+    text: marker.count > 1 ? `${marker.side} x${marker.count}` : marker.side,
+  };
+}
+
+function findBarTimeAtOrBefore(
+  barTimes: UTCTimestamp[],
+  targetTime: UTCTimestamp,
+): UTCTimestamp | null {
+  let low = 0;
+  let high = barTimes.length - 1;
+  let candidate: UTCTimestamp | null = null;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const time = barTimes[mid];
+    if (time <= targetTime) {
+      candidate = time;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return candidate;
+}
+
+interface MarkerAggregate {
+  time: UTCTimestamp;
+  side: "BUY" | "SELL";
+  count: number;
+  latestEventTime: UTCTimestamp;
 }
