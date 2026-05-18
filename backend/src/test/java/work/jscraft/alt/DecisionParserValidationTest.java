@@ -54,6 +54,25 @@ class DecisionParserValidationTest {
     }
 
     @Test
+    void toleratesRawNewlineInsideStringValue() {
+        String json = """
+                {
+                  "cycleStatus":"EXECUTE",
+                  "summary":"기아 박스권 매매",
+                  "orders":[
+                    {"sequenceNo":1,"symbolCode":"000270","side":"BUY","quantity":1,"orderType":"MARKET","rationale":"1차 진입
+2차 확인"}
+                  ]
+                }
+                """;
+
+        ParsedDecision decision = parser.parse(json);
+
+        assertThat(decision.orders()).hasSize(1);
+        assertThat(decision.orders().get(0).rationale()).contains("1차 진입", "2차 확인");
+    }
+
+    @Test
     void emptyOrInvalidJsonRaisesInvalidJson() {
         assertThatThrownBy(() -> parser.parse(""))
                 .isInstanceOf(DecisionParseException.class)
