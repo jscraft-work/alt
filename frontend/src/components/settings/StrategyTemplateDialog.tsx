@@ -146,94 +146,100 @@ export default function StrategyTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden p-0">
         <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? "전략 템플릿 추가" : "전략 템플릿 수정"}
-          </DialogTitle>
-          <DialogDescription>
-            신규 인스턴스의 기본값으로 사용됩니다. (저장 후 변경은 신규 인스턴스에만 적용)
-          </DialogDescription>
+          <div className="border-b px-6 py-5">
+            <DialogTitle>
+              {mode === "create" ? "전략 템플릿 추가" : "전략 템플릿 수정"}
+            </DialogTitle>
+            <DialogDescription>
+              신규 인스턴스의 기본값으로 사용됩니다. (저장 후 변경은 신규 인스턴스에만 적용)
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
         <form
-          className="flex flex-col gap-4"
+          className="flex min-h-0 flex-1 flex-col"
           onSubmit={(event) => {
             void onSubmit(event);
           }}
         >
-          <FormField
-            id="template-name"
-            label="이름"
-            required
-            error={errors.name?.message}
-          >
-            <Input id="template-name" {...register("name")} />
-          </FormField>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex flex-col gap-4">
+              <FormField
+                id="template-name"
+                label="이름"
+                required
+                error={errors.name?.message}
+              >
+                <Input id="template-name" {...register("name")} />
+              </FormField>
 
-          <FormField
-            id="template-description"
-            label="설명"
-            error={errors.description?.message}
-          >
-            <Input id="template-description" {...register("description")} />
-          </FormField>
+              <FormField
+                id="template-description"
+                label="설명"
+                error={errors.description?.message}
+              >
+                <Input id="template-description" {...register("description")} />
+              </FormField>
 
-          <FormField
-            id="template-cycle"
-            label="기본 실행 주기 (분)"
-            required
-            helpText="1 ~ 30 분, 권장 5분"
-            error={errors.defaultCycleMinutes?.message}
-          >
-            <Input
-              id="template-cycle"
-              type="number"
-              min={1}
-              max={30}
-              {...register("defaultCycleMinutes", { valueAsNumber: true })}
-            />
-          </FormField>
+              <FormField
+                id="template-cycle"
+                label="기본 실행 주기 (분)"
+                required
+                helpText="1 ~ 30 분, 권장 5분"
+                error={errors.defaultCycleMinutes?.message}
+              >
+                <Input
+                  id="template-cycle"
+                  type="number"
+                  min={1}
+                  max={30}
+                  {...register("defaultCycleMinutes", { valueAsNumber: true })}
+                />
+              </FormField>
 
-          <FormField
-            id="template-profile"
-            label="기본 트레이딩 모델 프로필 ID"
-            helpText="UUID. 비워두면 인스턴스 단위에서 지정합니다."
-            error={errors.defaultTradingModelProfileId?.message}
-          >
-            <Input
-              id="template-profile"
-              {...register("defaultTradingModelProfileId")}
-              placeholder="uuid"
-            />
-          </FormField>
+              <FormField
+                id="template-profile"
+                label="기본 트레이딩 모델 프로필 ID"
+                helpText="UUID. 비워두면 인스턴스 단위에서 지정합니다."
+                error={errors.defaultTradingModelProfileId?.message}
+              >
+                <Input
+                  id="template-profile"
+                  {...register("defaultTradingModelProfileId")}
+                  placeholder="uuid"
+                />
+              </FormField>
 
-          <FormField
-            id="template-prompt"
-            label="기본 프롬프트"
-            error={errors.defaultPromptText?.message}
-          >
-            <Textarea
-              id="template-prompt"
-              className="min-h-[100px] font-mono text-xs"
-              {...register("defaultPromptText")}
-            />
-          </FormField>
+              <FormField
+                id="template-prompt"
+                label="기본 프롬프트"
+                error={errors.defaultPromptText?.message}
+              >
+                <Textarea
+                  id="template-prompt"
+                  className="min-h-[100px] font-mono text-xs"
+                  {...register("defaultPromptText")}
+                />
+              </FormField>
 
-          <FormField
-            id="template-exec-config"
-            label="기본 실행 설정 (JSON)"
-            error={errors.defaultExecutionConfigJson?.message}
-          >
-            <Textarea
-              id="template-exec-config"
-              className="min-h-[100px] font-mono text-xs"
-              placeholder='{ "dailyCostCapKrw": 5000 }'
-              {...register("defaultExecutionConfigJson")}
-            />
-          </FormField>
+              <FormField
+                id="template-exec-config"
+                label="기본 실행 설정 (JSON)"
+                error={errors.defaultExecutionConfigJson?.message}
+              >
+                <Textarea
+                  id="template-exec-config"
+                  className="min-h-[100px] font-mono text-xs"
+                  placeholder='{ "dailyCostCapKrw": 5000 }'
+                  {...register("defaultExecutionConfigJson")}
+                />
+              </FormField>
+            </div>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="border-t px-6 py-4">
             <Button
               type="button"
               variant="outline"
