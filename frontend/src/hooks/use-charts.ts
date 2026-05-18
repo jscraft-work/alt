@@ -34,7 +34,8 @@ async function fetchMinuteBars(
     const res = await api.get<ApiEnvelope<MinuteBarsResponse>>(
       `/charts/minutes${buildChartQuery({
         symbolCode: filter.symbolCode,
-        date: filter.date,
+        dateFrom: filter.dateFrom,
+        dateTo: filter.dateTo,
       })}`,
     );
     return res.data.data;
@@ -50,7 +51,8 @@ async function fetchOrderOverlays(
     const res = await api.get<ApiEnvelope<ChartOrderOverlay[]>>(
       `/charts/order-overlays${buildChartQuery({
         symbolCode: filter.symbolCode,
-        date: filter.date,
+        dateFrom: filter.dateFrom,
+        dateTo: filter.dateTo,
         strategyInstanceId: filter.strategyInstanceId ?? null,
       })}`,
     );

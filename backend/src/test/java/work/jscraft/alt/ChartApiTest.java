@@ -61,18 +61,38 @@ class ChartApiTest extends AdminCatalogApiIntegrationTestSupport {
         seedMinuteBar("005930", OffsetDateTime.of(2026, 5, 10, 0, 1, 0, 0, ZoneOffset.UTC),
                 "80900", "81000", "80800", "80950", "5000");
 
-        mockMvc.perform(get("/api/charts/minutes")
+                mockMvc.perform(get("/api/charts/minutes")
                         .param("symbolCode", "005930")
                         .param("date", "2026-05-11"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.symbolCode").value("005930"))
-                .andExpect(jsonPath("$.data.date").value("2026-05-11"))
+                .andExpect(jsonPath("$.data.dateFrom").value("2026-05-11"))
+                .andExpect(jsonPath("$.data.dateTo").value("2026-05-11"))
                 .andExpect(jsonPath("$.data.bars.length()").value(2))
                 .andExpect(jsonPath("$.data.bars[0].barTime").value(org.hamcrest.Matchers.endsWith("+09:00")))
                 .andExpect(jsonPath("$.data.bars[0].openPrice").value(81000))
                 .andExpect(jsonPath("$.data.bars[0].highPrice").value(81100))
                 .andExpect(jsonPath("$.data.bars[0].lowPrice").value(80900))
                 .andExpect(jsonPath("$.data.bars[0].closePrice").value(81050));
+    }
+
+    @Test
+    void minutesAcceptsExplicitDateRange() throws Exception {
+        seedMinuteBar("005930", OffsetDateTime.of(2026, 5, 9, 0, 1, 0, 0, ZoneOffset.UTC),
+                "80000", "80100", "79900", "80050", "1000");
+        seedMinuteBar("005930", OffsetDateTime.of(2026, 5, 11, 0, 2, 0, 0, ZoneOffset.UTC),
+                "81050", "81200", "81000", "81150", "8400");
+        seedMinuteBar("005930", OffsetDateTime.of(2026, 5, 12, 0, 2, 0, 0, ZoneOffset.UTC),
+                "81150", "81300", "81100", "81200", "7400");
+
+        mockMvc.perform(get("/api/charts/minutes")
+                        .param("symbolCode", "005930")
+                        .param("dateFrom", "2026-05-09")
+                        .param("dateTo", "2026-05-11"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.dateFrom").value("2026-05-09"))
+                .andExpect(jsonPath("$.data.dateTo").value("2026-05-11"))
+                .andExpect(jsonPath("$.data.bars.length()").value(2));
     }
 
     @Test
@@ -116,6 +136,25 @@ class ChartApiTest extends AdminCatalogApiIntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].side").value("BUY"));
+    }
+
+    @Test
+    void orderOverlaysAcceptsExplicitDateRange() throws Exception {
+        StrategyInstanceEntity instance = createInstance("KR 모멘텀 A");
+
+        seedOrder(instance, "005930", "BUY", "filled",
+                OffsetDateTime.of(2026, 5, 9, 0, 35, 0, 0, ZoneOffset.UTC));
+        seedOrder(instance, "005930", "SELL", "filled",
+                OffsetDateTime.of(2026, 5, 11, 0, 36, 0, 0, ZoneOffset.UTC));
+        seedOrder(instance, "005930", "BUY", "filled",
+                OffsetDateTime.of(2026, 5, 12, 0, 35, 0, 0, ZoneOffset.UTC));
+
+        mockMvc.perform(get("/api/charts/order-overlays")
+                        .param("symbolCode", "005930")
+                        .param("dateFrom", "2026-05-09")
+                        .param("dateTo", "2026-05-11"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2));
     }
 
     private void seedMinuteBar(

@@ -350,13 +350,15 @@ export interface MinuteBar {
 
 export interface MinuteBarsResponse {
   symbolCode: string;
-  date: string;
+  dateFrom: string;
+  dateTo: string;
   bars: MinuteBar[];
 }
 
 export interface ChartMinuteBarsFilter {
   symbolCode: string;
-  date: string;
+  dateFrom: string;
+  dateTo: string;
 }
 
 export interface ChartOrderOverlayFilter extends ChartMinuteBarsFilter {

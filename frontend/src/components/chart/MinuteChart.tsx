@@ -59,6 +59,9 @@ export default function MinuteChart({
   const bodyWidth = Math.min(14, Math.max(chartWidth / bars.length - 2, 3));
   const firstBarTime = new Date(bars[0].barTime).getTime();
   const lastBarTime = new Date(bars[bars.length - 1].barTime).getTime();
+  const showDateInTicks =
+    new Date(bars[0].barTime).toDateString() !==
+    new Date(bars[bars.length - 1].barTime).toDateString();
 
   const priceToY = (price: number) =>
     priceChartBottom - ((price - minPrice) / priceRange) * PRICE_CHART_HEIGHT;
@@ -162,7 +165,7 @@ export default function MinuteChart({
                 fontSize="12"
                 textAnchor="middle"
               >
-                {formatTimeLabel(bars[index].barTime)}
+                {formatTimeLabel(bars[index].barTime, showDateInTicks)}
               </text>
             </g>
           );
@@ -293,7 +296,7 @@ function createTimeTickIndexes(length: number, count: number) {
   return Array.from(tickIndexes).sort((left, right) => left - right);
 }
 
-function formatTimeLabel(value: string) {
+function formatTimeLabel(value: string, showDate: boolean) {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
@@ -302,12 +305,14 @@ function formatTimeLabel(value: string) {
 
   const formatter = new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
+    month: showDate ? "2-digit" : undefined,
+    day: showDate ? "2-digit" : undefined,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
 
-  return formatter.format(date);
+  return formatter.format(date).replace(" ", "\u00A0");
 }
 
 function clamp(value: number, min: number, max: number) {

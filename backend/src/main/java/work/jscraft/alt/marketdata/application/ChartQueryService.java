@@ -33,9 +33,9 @@ public class ChartQueryService {
         this.tradeOrderRepository = tradeOrderRepository;
     }
 
-    public MinuteBarsResponse getMinuteBars(String symbolCode, LocalDate date) {
-        OffsetDateTime fromInclusive = date.atStartOfDay(KST).toOffsetDateTime();
-        OffsetDateTime toExclusive = date.plusDays(1).atStartOfDay(KST).toOffsetDateTime();
+    public MinuteBarsResponse getMinuteBars(String symbolCode, LocalDate dateFrom, LocalDate dateTo) {
+        OffsetDateTime fromInclusive = dateFrom.atStartOfDay(KST).toOffsetDateTime();
+        OffsetDateTime toExclusive = dateTo.plusDays(1).atStartOfDay(KST).toOffsetDateTime();
         List<MarketMinuteItemEntity> bars = marketMinuteItemRepository
                 .findBySymbolCodeAndBarTimeBetweenOrderByBarTimeAsc(symbolCode, fromInclusive, toExclusive);
         List<MinuteBar> mapped = bars.stream()
@@ -47,12 +47,12 @@ public class ChartQueryService {
                         bar.getClosePrice(),
                         bar.getVolume()))
                 .toList();
-        return new MinuteBarsResponse(symbolCode, date, mapped);
+        return new MinuteBarsResponse(symbolCode, dateFrom, dateTo, mapped);
     }
 
-    public List<OrderOverlay> getOrderOverlays(String symbolCode, LocalDate date, UUID strategyInstanceId) {
-        OffsetDateTime fromInclusive = date.atStartOfDay(KST).toOffsetDateTime();
-        OffsetDateTime toExclusive = date.plusDays(1).atStartOfDay(KST).toOffsetDateTime();
+    public List<OrderOverlay> getOrderOverlays(String symbolCode, LocalDate dateFrom, LocalDate dateTo, UUID strategyInstanceId) {
+        OffsetDateTime fromInclusive = dateFrom.atStartOfDay(KST).toOffsetDateTime();
+        OffsetDateTime toExclusive = dateTo.plusDays(1).atStartOfDay(KST).toOffsetDateTime();
         List<TradeOrderEntity> orders = strategyInstanceId == null
                 ? tradeOrderRepository.findByTradeOrderIntent_SymbolCodeAndRequestedAtBetweenOrderByRequestedAtAsc(
                         symbolCode, fromInclusive, toExclusive)

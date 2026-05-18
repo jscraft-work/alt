@@ -13,7 +13,8 @@ public final class ChartViews {
 
     public record MinuteBarsResponse(
             String symbolCode,
-            LocalDate date,
+            LocalDate dateFrom,
+            LocalDate dateTo,
             List<MinuteBar> bars) {
     }
 

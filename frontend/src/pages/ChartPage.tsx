@@ -36,6 +36,11 @@ interface ChartFilters {
   date: string;
 }
 
+interface ChartDateRange {
+  dateFrom: string;
+  dateTo: string;
+}
+
 export default function ChartPage() {
   const { selectedInstanceId, setSelectedInstanceId } =
     useStrategyInstanceSelection();
@@ -75,17 +80,21 @@ export default function ChartPage() {
     setAppliedFilters(next);
   };
 
+  const appliedRange = appliedFilters ? createSevenDayRange(appliedFilters.date) : null;
+
   const minuteBarsQuery = useMinuteBars(
     {
       symbolCode: appliedFilters?.symbolCode ?? "",
-      date: appliedFilters?.date ?? "",
+      dateFrom: appliedRange?.dateFrom ?? "",
+      dateTo: appliedRange?.dateTo ?? "",
     },
     shouldFetch,
   );
   const orderOverlaysQuery = useOrderOverlays(
     {
       symbolCode: appliedFilters?.symbolCode ?? "",
-      date: appliedFilters?.date ?? "",
+      dateFrom: appliedRange?.dateFrom ?? "",
+      dateTo: appliedRange?.dateTo ?? "",
       strategyInstanceId: selectedInstanceId,
     },
     shouldFetch,
@@ -148,7 +157,8 @@ export default function ChartPage() {
           <CardTitle>조회 필터</CardTitle>
           <CardDescription>
             종목을 빠른 선택 버튼으로 고르거나 직접 입력하고, 전략 인스턴스 선택은
-            주문 오버레이 조회 조건으로 반영됩니다.
+            주문 오버레이 조회 조건으로 반영됩니다. 기준일을 선택하면 최근 7일
+            범위를 자동 조회합니다.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -206,7 +216,7 @@ export default function ChartPage() {
                 />
               </FilterField>
 
-              <FilterField label="거래일" htmlFor="chart-date">
+              <FilterField label="기준일" htmlFor="chart-date">
                 <Input
                   id="chart-date"
                   type="date"
@@ -288,7 +298,11 @@ export default function ChartPage() {
               {appliedFilters && (
                 <div className="flex flex-wrap justify-end gap-2">
                   <Badge variant="outline">{appliedFilters.symbolCode}</Badge>
-                  <Badge variant="outline">{appliedFilters.date}</Badge>
+                  {appliedRange && (
+                    <Badge variant="outline">
+                      {appliedRange.dateFrom} ~ {appliedRange.dateTo}
+                    </Badge>
+                  )}
                   <Badge variant="outline">
                     주문 {formatNumber(overlays.length)}건
                   </Badge>
@@ -571,6 +585,13 @@ function normalizeSymbolCode(symbolCode: string) {
   return symbolCode.trim().toUpperCase();
 }
 
+function createSevenDayRange(anchorDate: string): ChartDateRange {
+  return {
+    dateFrom: shiftKstDate(anchorDate, -6),
+    dateTo: anchorDate,
+  };
+}
+
 function getTodayInKst() {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
@@ -579,6 +600,26 @@ function getTodayInKst() {
     day: "2-digit",
   });
   const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  return `${year}-${month}-${day}`;
+}
+
+function shiftKstDate(date: string, dayDelta: number) {
+  const base = new Date(`${date}T00:00:00+09:00`);
+  base.setUTCDate(base.getUTCDate() + dayDelta);
+  return formatDateInKst(base);
+}
+
+function formatDateInKst(value: Date) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(value);
   const year = parts.find((part) => part.type === "year")?.value ?? "0000";
   const month = parts.find((part) => part.type === "month")?.value ?? "01";
   const day = parts.find((part) => part.type === "day")?.value ?? "01";
