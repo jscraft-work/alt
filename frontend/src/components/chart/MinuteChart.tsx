@@ -68,7 +68,7 @@ export default function MinuteChart({
       return;
     }
 
-    const palette = resolveChartPalette(containerRef.current);
+    const palette = resolveChartPalette();
 
     const chart = createChart(containerRef.current, {
       autoSize: true,
@@ -387,18 +387,17 @@ function countPrependedBars(
   return previousStartIndex > 0 ? previousStartIndex : 0;
 }
 
-function resolveChartPalette(container: HTMLElement) {
+function resolveChartPalette() {
   return {
-    border: resolveCssColor(container, "--border", "#d9d9d9"),
-    foreground: resolveCssColor(container, "--foreground", "#111827"),
-    mutedForeground: resolveCssColor(container, "--muted-foreground", "#6b7280"),
-    profit: resolveCssColor(container, "--profit", "#e74c3c"),
-    loss: resolveCssColor(container, "--loss", "#3498db"),
+    border: resolveCssColor("--border", "#d9d9d9"),
+    foreground: resolveCssColor("--foreground", "#111827"),
+    mutedForeground: resolveCssColor("--muted-foreground", "#6b7280"),
+    profit: resolveCssColor("--profit", "#e74c3c"),
+    loss: resolveCssColor("--loss", "#3498db"),
   };
 }
 
 function resolveCssColor(
-  container: HTMLElement,
   token: string,
   fallback: string,
 ) {
@@ -408,13 +407,8 @@ function resolveCssColor(
     return fallback;
   }
 
-  const probe = document.createElement("span");
-  probe.style.color = rawToken;
-  probe.style.display = "none";
-  container.appendChild(probe);
-  const resolved = getComputedStyle(probe).color;
-  container.removeChild(probe);
-  return resolved || fallback;
+  const resolved = normalizeCssColor(rawToken);
+  return resolved ?? fallback;
 }
 
 function withAlpha(rgbColor: string, alpha: number) {
@@ -423,5 +417,23 @@ function withAlpha(rgbColor: string, alpha: number) {
     return rgbColor;
   }
   const [r, g, b] = match;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function normalizeCssColor(input: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    return null;
+  }
+
+  context.clearRect(0, 0, 1, 1);
+  context.fillStyle = "#000000";
+  context.fillStyle = input;
+  context.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+  const alpha = Number((a / 255).toFixed(4));
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
