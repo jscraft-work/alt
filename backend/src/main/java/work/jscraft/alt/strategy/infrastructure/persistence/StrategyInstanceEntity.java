@@ -57,6 +57,9 @@ public class StrategyInstanceEntity extends SoftDeletableUuidEntity {
     @JoinColumn(name = "trading_model_profile_id")
     private LlmModelProfileEntity tradingModelProfile;
 
+    @Column(name = "cycle_minutes")
+    private Integer cycleMinutes;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "execution_config_override_json", columnDefinition = "jsonb")
     private JsonNode executionConfigOverrideJson;
@@ -129,6 +132,14 @@ public class StrategyInstanceEntity extends SoftDeletableUuidEntity {
 
     public void setTradingModelProfile(LlmModelProfileEntity tradingModelProfile) {
         this.tradingModelProfile = tradingModelProfile;
+    }
+
+    public Integer getCycleMinutes() {
+        return cycleMinutes;
+    }
+
+    public void setCycleMinutes(Integer cycleMinutes) {
+        this.cycleMinutes = cycleMinutes;
     }
 
     public JsonNode getExecutionConfigOverrideJson() {

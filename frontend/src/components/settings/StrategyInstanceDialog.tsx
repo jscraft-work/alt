@@ -45,6 +45,14 @@ const schema = z.object({
     .int()
     .min(1, "0보다 커야 합니다."),
   tradingModelProfileId: z.string().optional(),
+  cycleMinutesText: z
+    .string()
+    .optional()
+    .refine((value) => {
+      if (!value || value.trim() === "") return true;
+      const parsed = Number(value);
+      return Number.isInteger(parsed) && parsed >= 1 && parsed <= 30;
+    }, "1 ~ 30 사이 정수를 입력해 주세요."),
   executionConfigOverrideJson: z
     .string()
     .optional()
@@ -94,6 +102,7 @@ export default function StrategyInstanceDialog({
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -104,6 +113,8 @@ export default function StrategyInstanceDialog({
       brokerAccountId: instance?.brokerAccountId ?? "",
       budgetAmount: instance?.budgetAmount ?? 0,
       tradingModelProfileId: instance?.tradingModelProfileId ?? "",
+      cycleMinutesText:
+        instance?.cycleMinutes != null ? String(instance.cycleMinutes) : "",
       executionConfigOverrideJson: stringifyJsonRecord(
         instance?.executionConfigOverride ?? undefined,
       ),
@@ -119,6 +130,8 @@ export default function StrategyInstanceDialog({
         brokerAccountId: instance?.brokerAccountId ?? "",
         budgetAmount: instance?.budgetAmount ?? 0,
         tradingModelProfileId: instance?.tradingModelProfileId ?? "",
+        cycleMinutesText:
+          instance?.cycleMinutes != null ? String(instance.cycleMinutes) : "",
         executionConfigOverrideJson: stringifyJsonRecord(
           instance?.executionConfigOverride ?? undefined,
         ),
@@ -126,10 +139,23 @@ export default function StrategyInstanceDialog({
     }
   }, [open, instance, reset]);
 
+  const selectedTemplateId = watch("strategyTemplateId");
+  const selectedTemplate = (templates.data ?? []).find(
+    (template) => template.id === selectedTemplateId,
+  );
+  const inheritedCycleMinutes =
+    instance?.cycleMinutes == null
+      ? instance?.effectiveCycleMinutes ?? selectedTemplate?.defaultCycleMinutes
+      : selectedTemplate?.defaultCycleMinutes;
+
   const onSubmit = handleSubmit(async (values) => {
     const executionConfig = values.executionConfigOverrideJson
       ? parseJsonRecord(values.executionConfigOverrideJson)
       : null;
+    const cycleMinutes =
+      values.cycleMinutesText && values.cycleMinutesText.trim() !== ""
+        ? Number(values.cycleMinutesText)
+        : null;
     const brokerAccountId =
       values.brokerAccountId && values.brokerAccountId.trim() !== ""
         ? values.brokerAccountId.trim()
@@ -148,6 +174,7 @@ export default function StrategyInstanceDialog({
         brokerAccountId,
         budgetAmount: values.budgetAmount,
         tradingModelProfileId,
+        cycleMinutes,
         executionConfigOverride: executionConfig,
       });
       onSuccess("create");
@@ -160,6 +187,7 @@ export default function StrategyInstanceDialog({
           budgetAmount: values.budgetAmount,
           brokerAccountId,
           tradingModelProfileId,
+          cycleMinutes,
           executionConfigOverride: executionConfig,
           version: instance.version,
         },
@@ -298,6 +326,26 @@ export default function StrategyInstanceDialog({
           </FormField>
 
           <FormField
+            id="instance-cycle"
+            label="실행 주기 (분)"
+            helpText={
+              inheritedCycleMinutes != null
+                ? `비워두면 템플릿 기본값 ${inheritedCycleMinutes}분을 사용합니다.`
+                : "비워두면 템플릿 기본값을 사용합니다."
+            }
+            error={errors.cycleMinutesText?.message}
+          >
+            <Input
+              id="instance-cycle"
+              type="number"
+              min={1}
+              max={30}
+              placeholder="템플릿 기본값 사용"
+              {...register("cycleMinutesText")}
+            />
+          </FormField>
+
+          <FormField
             id="instance-model"
             label="트레이딩 모델 프로필"
             helpText="비워두면 템플릿 기본값을 사용합니다."
@@ -325,7 +373,7 @@ export default function StrategyInstanceDialog({
             <Textarea
               id="instance-exec-config"
               className="min-h-[100px] font-mono text-xs"
-              placeholder='{ "cycleMinutes": 5 }'
+              placeholder='{ "slippageBps": 10 }'
               {...register("executionConfigOverrideJson")}
             />
           </FormField>

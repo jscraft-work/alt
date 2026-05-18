@@ -98,6 +98,7 @@ export default function StrategyInstancesPage() {
                 <TableHead>이름</TableHead>
                 <TableHead>모드</TableHead>
                 <TableHead>상태</TableHead>
+                <TableHead>주기</TableHead>
                 <TableHead className="text-right">예산</TableHead>
                 <TableHead>계좌</TableHead>
                 <TableHead className="w-[1%]"></TableHead>
@@ -119,6 +120,11 @@ export default function StrategyInstancesPage() {
                         <Badge variant="destructive">AUTO-PAUSED</Badge>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {row.cycleMinutes == null
+                      ? `템플릿 ${row.effectiveCycleMinutes}분`
+                      : `${row.cycleMinutes}분`}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatKrw(row.budgetAmount)}

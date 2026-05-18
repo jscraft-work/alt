@@ -10,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -118,6 +120,7 @@ public class StrategyInstanceService {
         entity.setBrokerAccount(brokerAccount);
         entity.setBudgetAmount(request.budgetAmount());
         entity.setTradingModelProfile(tradingModelProfile);
+        entity.setCycleMinutes(request.cycleMinutes());
         entity.setExecutionConfigOverrideJson(copyJsonValue(request.executionConfigOverride()));
 
         strategyInstanceRepository.saveAndFlush(entity);
@@ -168,6 +171,9 @@ public class StrategyInstanceService {
         LlmModelProfileEntity requestedTradingModelProfile = request.hasTradingModelProfileId()
                 ? findTradingModelProfileOverride(request.tradingModelProfileId())
                 : entity.getTradingModelProfile();
+        Integer requestedCycleMinutes = request.hasCycleMinutes()
+                ? request.cycleMinutes()
+                : entity.getCycleMinutes();
         JsonNode requestedExecutionConfig = request.hasExecutionConfigOverride()
                 ? copyJsonValue(request.executionConfigOverride())
                 : copyJsonValue(entity.getExecutionConfigOverrideJson());
@@ -192,6 +198,7 @@ public class StrategyInstanceService {
         entity.setBrokerAccount(requestedBrokerAccount);
         entity.setBudgetAmount(requestedBudgetAmount);
         entity.setTradingModelProfile(requestedTradingModelProfile);
+        entity.setCycleMinutes(requestedCycleMinutes);
         entity.setExecutionConfigOverrideJson(requestedExecutionConfig);
 
         StrategyInstanceView updated = toView(strategyInstanceRepository.saveAndFlush(entity));
@@ -408,7 +415,7 @@ public class StrategyInstanceService {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "트레이딩 모델이 없어 활성화할 수 없습니다.");
         }
 
-        if (entity.getStrategyTemplate().getDefaultCycleMinutes() <= 0) {
+        if (effectiveCycleMinutes(entity) <= 0) {
             throw new ApiConflictException("INSTANCE_NOT_ACTIVATABLE", "실행 주기가 없어 활성화할 수 없습니다.");
         }
 
@@ -439,6 +446,12 @@ public class StrategyInstanceService {
         return requestedValue == null || requestedValue.isNull()
                 ? null
                 : requestedValue.deepCopy();
+    }
+
+    private int effectiveCycleMinutes(StrategyInstanceEntity entity) {
+        return entity.getCycleMinutes() != null
+                ? entity.getCycleMinutes()
+                : entity.getStrategyTemplate().getDefaultCycleMinutes();
     }
 
     private LlmModelProfileEntity findTradingModelProfileOverride(UUID requestedModelProfileId) {
@@ -570,6 +583,8 @@ public class StrategyInstanceService {
                 entity.getBudgetAmount(),
                 entity.getCurrentPromptVersion() == null ? null : entity.getCurrentPromptVersion().getId().toString(),
                 entity.getTradingModelProfile() == null ? null : entity.getTradingModelProfile().getId().toString(),
+                entity.getCycleMinutes(),
+                effectiveCycleMinutes(entity),
                 copyJsonValue(entity.getExecutionConfigOverrideJson()),
                 entity.getAutoPausedReason(),
                 entity.getAutoPausedAt() == null ? null : entity.getAutoPausedAt().toString(),
@@ -623,6 +638,8 @@ public class StrategyInstanceService {
             BigDecimal budgetAmount,
             String currentPromptVersionId,
             String tradingModelProfileId,
+            Integer cycleMinutes,
+            int effectiveCycleMinutes,
             JsonNode executionConfigOverride,
             String autoPausedReason,
             String autoPausedAt,
@@ -662,6 +679,9 @@ public class StrategyInstanceService {
                     value = "0.0001",
                     message = "budgetAmount는 0보다 커야 합니다.") BigDecimal budgetAmount,
             UUID tradingModelProfileId,
+            @Min(value = 1, message = "cycleMinutes는 1 이상이어야 합니다.") @Max(
+                    value = 30,
+                    message = "cycleMinutes는 30 이하여야 합니다.") Integer cycleMinutes,
             JsonNode executionConfigOverride) {
     }
 
@@ -676,6 +696,8 @@ public class StrategyInstanceService {
         private BigDecimal budgetAmount;
         private boolean tradingModelProfileIdPresent;
         private UUID tradingModelProfileId;
+        private boolean cycleMinutesPresent;
+        private Integer cycleMinutes;
         private boolean executionConfigOverridePresent;
         private JsonNode executionConfigOverride;
         @NotNull(message = "version은 필수입니다.")
@@ -749,6 +771,22 @@ public class StrategyInstanceService {
         public void setTradingModelProfileId(UUID tradingModelProfileId) {
             this.tradingModelProfileIdPresent = true;
             this.tradingModelProfileId = tradingModelProfileId;
+        }
+
+        public boolean hasCycleMinutes() {
+            return cycleMinutesPresent;
+        }
+
+        @Min(value = 1, message = "cycleMinutes는 1 이상이어야 합니다.")
+        @Max(value = 30, message = "cycleMinutes는 30 이하여야 합니다.")
+        public Integer cycleMinutes() {
+            return cycleMinutes;
+        }
+
+        @JsonSetter("cycleMinutes")
+        public void setCycleMinutes(Integer cycleMinutes) {
+            this.cycleMinutesPresent = true;
+            this.cycleMinutes = cycleMinutes;
         }
 
         public boolean hasExecutionConfigOverride() {

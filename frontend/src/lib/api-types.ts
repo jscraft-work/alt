@@ -421,14 +421,20 @@ export interface StrategyTemplateUpdateRequest {
 export interface StrategyInstance {
   id: string;
   strategyTemplateId: string;
+  strategyTemplateName: string;
   name: string;
   executionMode: ExecutionMode;
   lifecycleState: LifecycleState;
   autoPausedReason: AutoPausedReason;
   brokerAccountId: string | null;
+  brokerAccountMasked: string | null;
   budgetAmount: number;
+  currentPromptVersionId: string | null;
   tradingModelProfileId: string | null;
+  cycleMinutes: number | null;
+  effectiveCycleMinutes: number;
   executionConfigOverride: JsonRecord | null;
+  autoPausedAt: string | null;
   version: number;
   updatedAt: string;
 }
@@ -440,6 +446,7 @@ export interface StrategyInstanceCreateRequest {
   brokerAccountId: string | null;
   budgetAmount: number;
   tradingModelProfileId: string | null;
+  cycleMinutes?: number | null;
   executionConfigOverride?: JsonRecord | null;
 }
 
@@ -449,6 +456,7 @@ export interface StrategyInstanceUpdateRequest {
   budgetAmount?: number;
   brokerAccountId?: string | null;
   tradingModelProfileId?: string | null;
+  cycleMinutes?: number | null;
   executionConfigOverride?: JsonRecord | null;
   version: number;
 }

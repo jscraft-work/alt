@@ -51,12 +51,15 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         null,
                         new BigDecimal("10000000.0000"),
                         null,
+                        null,
                         null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.strategyTemplateId").value(template.getId().toString()))
                 .andExpect(jsonPath("$.data.lifecycleState").value("draft"))
                 .andExpect(jsonPath("$.data.executionMode").value("paper"))
                 .andExpect(jsonPath("$.data.tradingModelProfileId").isEmpty())
+                .andExpect(jsonPath("$.data.cycleMinutes").isEmpty())
+                .andExpect(jsonPath("$.data.effectiveCycleMinutes").value(template.getDefaultCycleMinutes()))
                 .andExpect(jsonPath("$.data.executionConfigOverride").isEmpty())
                 .andExpect(jsonPath("$.data.currentPromptVersionId").isNotEmpty())
                 .andReturn()
@@ -69,6 +72,7 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
 
         StrategyInstanceEntity createdEntity = strategyInstanceRepository.findById(UUID.fromString(strategyInstanceId)).orElseThrow();
         assertThat(createdEntity.getTradingModelProfile()).isNull();
+        assertThat(createdEntity.getCycleMinutes()).isNull();
         assertThat(createdEntity.getExecutionConfigOverrideJson()).isNull();
 
         List<StrategyInstancePromptVersionEntity> promptVersions =
@@ -87,6 +91,7 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                           "brokerAccountId": "%s",
                           "budgetAmount": 12000000,
                           "tradingModelProfileId": "%s",
+                          "cycleMinutes": 5,
                           "executionConfigOverride": { "slippageBps": 10 },
                           "version": %d
                         }
@@ -96,6 +101,8 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                 .andExpect(jsonPath("$.data.executionMode").value("live"))
                 .andExpect(jsonPath("$.data.brokerAccountId").value(brokerAccount.getId().toString()))
                 .andExpect(jsonPath("$.data.brokerAccountMasked").value("1234-****-7890"))
+                .andExpect(jsonPath("$.data.cycleMinutes").value(5))
+                .andExpect(jsonPath("$.data.effectiveCycleMinutes").value(5))
                 .andExpect(jsonPath("$.data.executionConfigOverride.slippageBps").value(10))
                 .andReturn()
                 .getResponse()
@@ -146,6 +153,7 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         null,
                         new BigDecimal("10000000.0000"),
                         null,
+                        null,
                         null))))
                 .andExpect(status().isOk())
                 .andReturn()
@@ -176,6 +184,8 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
         JsonNode listed = objectMapper.readTree(listBody).path("data").get(0);
         assertThat(listed.path("id").asText()).isEqualTo(strategyInstanceId);
         assertThat(listed.path("tradingModelProfileId").isNull()).isTrue();
+        assertThat(listed.path("cycleMinutes").isNull()).isTrue();
+        assertThat(listed.path("effectiveCycleMinutes").asInt()).isEqualTo(template.getDefaultCycleMinutes());
         assertThat(listed.path("executionConfigOverride").isNull()).isTrue();
     }
 
@@ -195,6 +205,7 @@ class StrategyInstanceAdminApiTest extends AdminCatalogApiIntegrationTestSupport
                         "paper",
                         null,
                         new BigDecimal("10000000.0000"),
+                        null,
                         null,
                         null))))
                 .andExpect(status().isOk())

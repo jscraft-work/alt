@@ -132,6 +132,7 @@ abstract class AdminCatalogApiIntegrationTestSupport extends AuthApiIntegrationT
                         brokerAccountId,
                         new BigDecimal("1000000.0000"),
                         null,
+                        null,
                         null))))
                 .andExpect(MockMvcResultMatchers.status().isOk())
                 .andReturn()

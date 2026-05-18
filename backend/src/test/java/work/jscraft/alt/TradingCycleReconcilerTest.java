@@ -43,7 +43,7 @@ class TradingCycleReconcilerTest {
 
     @Test
     void activeInstanceWithoutSchedule_registersIfNotExists() throws Exception {
-        StrategyInstanceEntity active = buildActiveInstance(5);
+        StrategyInstanceEntity active = buildActiveInstance(5, null);
         when(repository.findByLifecycleStateAndAutoPausedReasonIsNull("active"))
                 .thenReturn(List.of(active));
         when(schedulerClient.getScheduledExecutionsForTask(
@@ -85,7 +85,7 @@ class TradingCycleReconcilerTest {
 
     @Test
     void activeAndScheduled_doesNotCancel() throws Exception {
-        StrategyInstanceEntity active = buildActiveInstance(5);
+        StrategyInstanceEntity active = buildActiveInstance(5, null);
         when(repository.findByLifecycleStateAndAutoPausedReasonIsNull("active"))
                 .thenReturn(List.of(active));
 
@@ -103,13 +103,32 @@ class TradingCycleReconcilerTest {
         verify(schedulerClient, never()).cancel(any());
     }
 
-    private StrategyInstanceEntity buildActiveInstance(int cycleMinutes) throws Exception {
+    @Test
+    void instanceCycleOverrideWinsOverTemplateDefault() throws Exception {
+        StrategyInstanceEntity active = buildActiveInstance(10, 5);
+        when(repository.findByLifecycleStateAndAutoPausedReasonIsNull("active"))
+                .thenReturn(List.of(active));
+        when(schedulerClient.getScheduledExecutionsForTask(
+                TradingCycleSchedulerConfig.TASK_NAME, CycleScheduleData.class))
+                .thenReturn(List.of());
+
+        reconciler.reconcile();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<SchedulableInstance<CycleScheduleData>> captor =
+                ArgumentCaptor.forClass(SchedulableInstance.class);
+        verify(schedulerClient).scheduleIfNotExists(captor.capture());
+        assertThat(captor.getValue().getTaskInstance().getData().cycleMinutes()).isEqualTo(5);
+    }
+
+    private StrategyInstanceEntity buildActiveInstance(int templateCycleMinutes, Integer instanceCycleMinutes) throws Exception {
         StrategyTemplateEntity template = new StrategyTemplateEntity();
-        template.setDefaultCycleMinutes(cycleMinutes);
+        template.setDefaultCycleMinutes(templateCycleMinutes);
 
         StrategyInstanceEntity entity = new StrategyInstanceEntity();
         setId(entity, UUID.randomUUID());
         entity.setStrategyTemplate(template);
+        entity.setCycleMinutes(instanceCycleMinutes);
         return entity;
     }
 

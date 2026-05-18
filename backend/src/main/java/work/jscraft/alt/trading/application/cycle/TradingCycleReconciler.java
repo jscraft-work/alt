@@ -71,7 +71,9 @@ public class TradingCycleReconciler {
     }
 
     private void schedule(StrategyInstanceEntity instance) {
-        int cycleMinutes = instance.getStrategyTemplate().getDefaultCycleMinutes();
+        int cycleMinutes = instance.getCycleMinutes() != null
+                ? instance.getCycleMinutes()
+                : instance.getStrategyTemplate().getDefaultCycleMinutes();
         CycleScheduleData data = new CycleScheduleData(instance.getId(), cycleMinutes);
         boolean created = schedulerClient.scheduleIfNotExists(
                 TradingCycleSchedulerConfig.TRADING_CYCLE_TASK
