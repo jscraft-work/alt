@@ -26,7 +26,6 @@ public class PortfolioUpdateService {
     private static final MathContext AVG_CONTEXT = new MathContext(20);
     private static final int CASH_SCALE = 4;
     private static final int PRICE_SCALE = 8;
-    private static final int PNL_SCALE = 4;
 
     private final PortfolioRepository portfolioRepository;
     private final PortfolioPositionRepository portfolioPositionRepository;
@@ -73,11 +72,6 @@ public class PortfolioUpdateService {
         }
         position.setQuantity(newQty.setScale(PRICE_SCALE, RoundingMode.HALF_UP));
         position.setAvgBuyPrice(newAvg.setScale(PRICE_SCALE, RoundingMode.HALF_UP));
-        position.setLastMarkPrice(fillPrice.setScale(PRICE_SCALE, RoundingMode.HALF_UP));
-        BigDecimal unrealizedPnl = newQty.signum() == 0
-                ? BigDecimal.ZERO
-                : fillPrice.subtract(newAvg).multiply(newQty);
-        position.setUnrealizedPnl(unrealizedPnl.setScale(PNL_SCALE, RoundingMode.HALF_UP));
         portfolioPositionRepository.saveAndFlush(position);
 
         recomputeTotalAsset(portfolio);
@@ -102,15 +96,10 @@ public class PortfolioUpdateService {
 
         BigDecimal realized = fillPrice.subtract(position.getAvgBuyPrice()).multiply(quantity);
         portfolio.setRealizedPnlToday(
-                portfolio.getRealizedPnlToday().add(realized).setScale(PNL_SCALE, RoundingMode.HALF_UP));
+                portfolio.getRealizedPnlToday().add(realized).setScale(CASH_SCALE, RoundingMode.HALF_UP));
 
         BigDecimal newQty = position.getQuantity().subtract(quantity);
         position.setQuantity(newQty.setScale(PRICE_SCALE, RoundingMode.HALF_UP));
-        position.setLastMarkPrice(fillPrice.setScale(PRICE_SCALE, RoundingMode.HALF_UP));
-        BigDecimal unrealizedPnl = newQty.signum() == 0
-                ? BigDecimal.ZERO
-                : fillPrice.subtract(position.getAvgBuyPrice()).multiply(newQty);
-        position.setUnrealizedPnl(unrealizedPnl.setScale(PNL_SCALE, RoundingMode.HALF_UP));
         portfolioPositionRepository.saveAndFlush(position);
 
         recomputeTotalAsset(portfolio);
@@ -130,10 +119,7 @@ public class PortfolioUpdateService {
                 portfolioPositionRepository.findByStrategyInstanceId(portfolio.getStrategyInstanceId());
         BigDecimal positionsValue = BigDecimal.ZERO;
         for (PortfolioPositionEntity position : positions) {
-            BigDecimal mark = position.getLastMarkPrice() != null
-                    ? position.getLastMarkPrice()
-                    : position.getAvgBuyPrice();
-            positionsValue = positionsValue.add(position.getQuantity().multiply(mark));
+            positionsValue = positionsValue.add(position.getQuantity().multiply(position.getAvgBuyPrice()));
         }
         portfolio.setTotalAssetAmount(
                 portfolio.getCashAmount().add(positionsValue).setScale(CASH_SCALE, RoundingMode.HALF_UP));

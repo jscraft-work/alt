@@ -53,8 +53,8 @@ class PortfolioUpdateServiceTest extends TradingCycleIntegrationTestSupport {
         PortfolioEntity portfolio = portfolioRepository.findByStrategyInstanceId(instance.getId()).orElseThrow();
         // cash = 1,000,000 - 4*80000 - 6*85000 = 1,000,000 - 320000 - 510000 = 170,000
         assertThat(portfolio.getCashAmount()).isEqualByComparingTo("170000.0000");
-        // total = cash + qty * lastMark (=85000) = 170,000 + 10 * 85,000 = 1,020,000
-        assertThat(portfolio.getTotalAssetAmount()).isEqualByComparingTo("1020000.0000");
+        // total = cash + qty * avgBuy (=83000) = 170,000 + 10 * 83,000 = 1,000,000
+        assertThat(portfolio.getTotalAssetAmount()).isEqualByComparingTo("1000000.0000");
     }
 
     @Test
@@ -76,10 +76,6 @@ class PortfolioUpdateServiceTest extends TradingCycleIntegrationTestSupport {
         assertThat(position.getQuantity()).isEqualByComparingTo("6");
         // avg unchanged after sell
         assertThat(position.getAvgBuyPrice()).isEqualByComparingTo("80000");
-        // last mark = 85000
-        assertThat(position.getLastMarkPrice()).isEqualByComparingTo("85000");
-        // unrealized = (85000 - 80000) * 6 = 30000
-        assertThat(position.getUnrealizedPnl()).isEqualByComparingTo("30000.0000");
     }
 
     @Test

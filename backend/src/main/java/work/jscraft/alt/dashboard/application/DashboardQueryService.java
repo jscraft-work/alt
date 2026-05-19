@@ -1,6 +1,7 @@
 package work.jscraft.alt.dashboard.application;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -30,6 +31,8 @@ import work.jscraft.alt.dashboard.domain.SystemStatusClassifier;
 import work.jscraft.alt.dashboard.domain.SystemStatusEvaluation;
 import work.jscraft.alt.marketdata.infrastructure.persistence.AssetMasterEntity;
 import work.jscraft.alt.marketdata.infrastructure.persistence.AssetMasterRepository;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketPriceItemEntity;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketPriceItemRepository;
 import work.jscraft.alt.ops.infrastructure.persistence.OpsEventEntity;
 import work.jscraft.alt.ops.infrastructure.persistence.OpsEventRepository;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioEntity;
@@ -56,6 +59,8 @@ public class DashboardQueryService {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final Sort UPDATED_AT_DESC = Sort.by(Sort.Direction.DESC, "updatedAt");
+    private static final int CASH_SCALE = 4;
+    private static final int PRICE_SCALE = 8;
     private static final List<MonitoredService> MONITORED_SERVICES = List.of(
             new MonitoredService("marketdata", true),
             new MonitoredService("news", false),
@@ -71,6 +76,7 @@ public class DashboardQueryService {
     private final TradeOrderRepository tradeOrderRepository;
     private final OpsEventRepository opsEventRepository;
     private final AssetMasterRepository assetMasterRepository;
+    private final MarketPriceItemRepository marketPriceItemRepository;
     private final SystemStatusClassifier systemStatusClassifier;
     private final Clock clock;
 
@@ -83,6 +89,7 @@ public class DashboardQueryService {
             TradeOrderRepository tradeOrderRepository,
             OpsEventRepository opsEventRepository,
             AssetMasterRepository assetMasterRepository,
+            MarketPriceItemRepository marketPriceItemRepository,
             SystemStatusClassifier systemStatusClassifier,
             Clock clock) {
         this.strategyInstanceRepository = strategyInstanceRepository;
@@ -93,6 +100,7 @@ public class DashboardQueryService {
         this.tradeOrderRepository = tradeOrderRepository;
         this.opsEventRepository = opsEventRepository;
         this.assetMasterRepository = assetMasterRepository;
+        this.marketPriceItemRepository = marketPriceItemRepository;
         this.systemStatusClassifier = systemStatusClassifier;
         this.clock = clock;
     }
@@ -114,6 +122,10 @@ public class DashboardQueryService {
 
         Optional<PortfolioEntity> portfolio = portfolioRepository.findByStrategyInstanceId(strategyInstanceId);
         List<PortfolioPositionEntity> positions = portfolioPositionRepository.findByStrategyInstanceId(strategyInstanceId);
+        List<PositionSnapshot> positionSnapshots = positions.stream()
+                .sorted(Comparator.comparing(PortfolioPositionEntity::getSymbolCode))
+                .map(this::toPositionSnapshot)
+                .toList();
         Optional<TradeDecisionLogEntity> latestDecision =
                 tradeDecisionLogRepository.findFirstByStrategyInstance_IdOrderByCycleStartedAtDesc(strategyInstanceId);
         List<TradeOrderEntity> recentOrders = tradeOrderRepository.findByStrategyInstance_IdOrderByRequestedAtDesc(
@@ -129,22 +141,24 @@ public class DashboardQueryService {
                 instance.getBrokerAccount() != null ? instance.getBrokerAccount().getAccountMasked() : null);
 
         PortfolioSummary portfolioSummary = portfolio
-                .map(p -> new PortfolioSummary(p.getCashAmount(), p.getTotalAssetAmount(), p.getRealizedPnlToday()))
+                .map(p -> new PortfolioSummary(
+                        p.getCashAmount(),
+                        computeCurrentTotalAsset(p, positionSnapshots),
+                        p.getRealizedPnlToday()))
                 .orElseGet(() -> new PortfolioSummary(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
 
-        List<PositionView> positionViews = positions.stream()
-                .sorted(Comparator.comparing(PortfolioPositionEntity::getSymbolCode))
+        List<PositionView> positionViews = positionSnapshots.stream()
                 .map(position -> {
-                    String symbolName = assetMasterRepository.findBySymbolCode(position.getSymbolCode())
+                    String symbolName = assetMasterRepository.findBySymbolCode(position.symbolCode())
                             .map(AssetMasterEntity::getSymbolName)
-                            .orElse(position.getSymbolCode());
+                            .orElse(position.symbolCode());
                     return new PositionView(
-                            position.getSymbolCode(),
+                            position.symbolCode(),
                             symbolName,
-                            position.getQuantity(),
-                            position.getAvgBuyPrice(),
-                            position.getLastMarkPrice(),
-                            position.getUnrealizedPnl());
+                            position.quantity(),
+                            position.avgBuyPrice(),
+                            position.lastMarkPrice(),
+                            position.unrealizedPnl());
                 })
                 .toList();
 
@@ -205,6 +219,9 @@ public class DashboardQueryService {
 
     private StrategyOverviewCardView toOverviewCard(StrategyInstanceEntity entity) {
         Optional<PortfolioEntity> portfolio = portfolioRepository.findByStrategyInstanceId(entity.getId());
+        List<PositionSnapshot> positions = portfolioPositionRepository.findByStrategyInstanceId(entity.getId()).stream()
+                .map(this::toPositionSnapshot)
+                .toList();
         Optional<TradeDecisionLogEntity> latestDecision =
                 tradeDecisionLogRepository.findFirstByStrategyInstance_IdOrderByCycleStartedAtDesc(entity.getId());
         long watchlistCount = watchlistRelationRepository.countByStrategyInstanceId(entity.getId());
@@ -216,11 +233,40 @@ public class DashboardQueryService {
                 entity.getAutoPausedReason(),
                 entity.getBudgetAmount(),
                 portfolio.map(PortfolioEntity::getCashAmount).orElse(BigDecimal.ZERO),
-                portfolio.map(PortfolioEntity::getTotalAssetAmount).orElse(BigDecimal.ZERO),
+                portfolio.map(value -> computeCurrentTotalAsset(value, positions)).orElse(BigDecimal.ZERO),
                 portfolio.map(PortfolioEntity::getRealizedPnlToday).orElse(BigDecimal.ZERO),
                 latestDecision.map(TradeDecisionLogEntity::getCycleStatus).orElse(null),
                 latestDecision.map(decision -> toKst(decision.getCycleStartedAt())).orElse(null),
                 watchlistCount);
+    }
+
+    private PositionSnapshot toPositionSnapshot(PortfolioPositionEntity position) {
+        BigDecimal avgBuyPrice = defaultBigDecimal(position.getAvgBuyPrice());
+        BigDecimal quantity = defaultBigDecimal(position.getQuantity());
+        BigDecimal markPrice = marketPriceItemRepository.findFirstBySymbolCodeOrderBySnapshotAtDesc(position.getSymbolCode())
+                .map(MarketPriceItemEntity::getLastPrice)
+                .orElse(avgBuyPrice);
+        BigDecimal unrealizedPnl = quantity.signum() == 0
+                ? BigDecimal.ZERO
+                : markPrice.subtract(avgBuyPrice).multiply(quantity);
+        return new PositionSnapshot(
+                position.getSymbolCode(),
+                quantity,
+                avgBuyPrice,
+                markPrice.setScale(PRICE_SCALE, RoundingMode.HALF_UP),
+                unrealizedPnl.setScale(CASH_SCALE, RoundingMode.HALF_UP));
+    }
+
+    private BigDecimal computeCurrentTotalAsset(PortfolioEntity portfolio, List<PositionSnapshot> positions) {
+        BigDecimal positionsValue = positions.stream()
+                .map(position -> position.quantity().multiply(position.lastMarkPrice()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return defaultBigDecimal(portfolio.getCashAmount()).add(positionsValue)
+                .setScale(CASH_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal defaultBigDecimal(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
     private OffsetDateTime toKst(OffsetDateTime value) {
@@ -228,6 +274,14 @@ public class DashboardQueryService {
             return null;
         }
         return value.atZoneSameInstant(KST).toOffsetDateTime();
+    }
+
+    private record PositionSnapshot(
+            String symbolCode,
+            BigDecimal quantity,
+            BigDecimal avgBuyPrice,
+            BigDecimal lastMarkPrice,
+            BigDecimal unrealizedPnl) {
     }
 
     private record MonitoredService(String name, boolean marketSensitive) {

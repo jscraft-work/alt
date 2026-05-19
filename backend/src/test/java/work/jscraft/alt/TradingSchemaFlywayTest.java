@@ -35,7 +35,7 @@ class TradingSchemaFlywayTest {
                     .locations("classpath:db/migration")
                     .load();
 
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(14);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(15);
 
             try (Connection connection = DriverManager.getConnection(
                     jdbcUrl(databaseName),
@@ -44,7 +44,7 @@ class TradingSchemaFlywayTest {
                  Statement statement = connection.createStatement()) {
 
                 assertThat(singleInt(statement, "select count(*) from flyway_schema_history where success = true"))
-                        .isEqualTo(14);
+                        .isEqualTo(15);
                 assertThat(regclass(statement, "strategy_instance")).isEqualTo("strategy_instance");
                 assertThat(regclass(statement, "strategy_instance_prompt_version"))
                         .isEqualTo("strategy_instance_prompt_version");
@@ -66,6 +66,8 @@ class TradingSchemaFlywayTest {
                 assertThat(regclass(statement, "disclosure_item")).isEqualTo("disclosure_item");
                 assertThat(regclass(statement, "macro_item")).isEqualTo("macro_item");
                 assertThat(regclass(statement, "scheduled_tasks")).isEqualTo("scheduled_tasks");
+                assertThat(columnExists(statement, "portfolio_position", "last_mark_price")).isFalse();
+                assertThat(columnExists(statement, "portfolio_position", "unrealized_pnl")).isFalse();
             }
         } finally {
             dropDatabase(databaseName);
@@ -110,6 +112,19 @@ class TradingSchemaFlywayTest {
         try (ResultSet resultSet = statement.executeQuery("select to_regclass('%s')".formatted(tableName))) {
             resultSet.next();
             return resultSet.getString(1);
+        }
+    }
+
+    private boolean columnExists(Statement statement, String tableName, String columnName) throws Exception {
+        try (ResultSet resultSet = statement.executeQuery("""
+                select exists (
+                    select 1
+                    from information_schema.columns
+                    where table_name = '%s' and column_name = '%s'
+                )
+                """.formatted(tableName, columnName))) {
+            resultSet.next();
+            return resultSet.getBoolean(1);
         }
     }
 }

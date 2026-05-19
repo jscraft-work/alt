@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import work.jscraft.alt.llm.infrastructure.persistence.LlmModelProfileEntity;
 import work.jscraft.alt.marketdata.infrastructure.persistence.AssetMasterEntity;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketPriceItemEntity;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketPriceItemRepository;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioEntity;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioPositionEntity;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioPositionRepository;
@@ -39,6 +41,9 @@ class InstanceDashboardApiTest extends AdminCatalogApiIntegrationTestSupport {
 
     @Autowired
     private PortfolioPositionRepository portfolioPositionRepository;
+
+    @Autowired
+    private MarketPriceItemRepository marketPriceItemRepository;
 
     @Autowired
     private TradeCycleLogRepository tradeCycleLogRepository;
@@ -76,9 +81,19 @@ class InstanceDashboardApiTest extends AdminCatalogApiIntegrationTestSupport {
         position.setSymbolCode(samsung.getSymbolCode());
         position.setQuantity(new BigDecimal("12.00000000"));
         position.setAvgBuyPrice(new BigDecimal("81200.00000000"));
-        position.setLastMarkPrice(new BigDecimal("82600.00000000"));
-        position.setUnrealizedPnl(new BigDecimal("16800.0000"));
         portfolioPositionRepository.saveAndFlush(position);
+
+        MarketPriceItemEntity price = new MarketPriceItemEntity();
+        price.setSymbolCode(samsung.getSymbolCode());
+        price.setSnapshotAt(OffsetDateTime.of(2026, 5, 11, 2, 0, 0, 0, ZoneOffset.UTC));
+        price.setBusinessDate(LocalDate.of(2026, 5, 11));
+        price.setLastPrice(new BigDecimal("82600.00000000"));
+        price.setOpenPrice(new BigDecimal("82000.00000000"));
+        price.setHighPrice(new BigDecimal("83000.00000000"));
+        price.setLowPrice(new BigDecimal("81000.00000000"));
+        price.setVolume(new BigDecimal("1000000.0000"));
+        price.setSourceName("kis");
+        marketPriceItemRepository.saveAndFlush(price);
 
         TradeCycleLogEntity cycleLog = new TradeCycleLogEntity();
         cycleLog.setStrategyInstance(instance);
@@ -133,12 +148,14 @@ class InstanceDashboardApiTest extends AdminCatalogApiIntegrationTestSupport {
                 .andExpect(jsonPath("$.data.instance.name").value("KR 모멘텀 A"))
                 .andExpect(jsonPath("$.data.instance.executionMode").value("paper"))
                 .andExpect(jsonPath("$.data.portfolio.cashAmount").value(6200000.0000))
-                .andExpect(jsonPath("$.data.portfolio.totalAssetAmount").value(10120000.0000))
+                .andExpect(jsonPath("$.data.portfolio.totalAssetAmount").value(7191200.0000))
                 .andExpect(jsonPath("$.data.portfolio.realizedPnlToday").value(120000.0000))
                 .andExpect(jsonPath("$.data.positions.length()").value(1))
                 .andExpect(jsonPath("$.data.positions[0].symbolCode").value("005930"))
                 .andExpect(jsonPath("$.data.positions[0].symbolName").value("삼성전자"))
                 .andExpect(jsonPath("$.data.positions[0].quantity").value(12.00000000))
+                .andExpect(jsonPath("$.data.positions[0].lastMarkPrice").value(82600.00000000))
+                .andExpect(jsonPath("$.data.positions[0].unrealizedPnl").value(16800.00000000))
                 .andExpect(jsonPath("$.data.systemStatus.length()").value(5))
                 .andExpect(jsonPath("$.data.latestDecision.decisionLogId").value(decision.getId().toString()))
                 .andExpect(jsonPath("$.data.latestDecision.cycleStatus").value("EXECUTE"))

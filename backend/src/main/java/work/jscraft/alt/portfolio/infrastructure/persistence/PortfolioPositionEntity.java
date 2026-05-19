@@ -34,12 +34,6 @@ public class PortfolioPositionEntity {
     @Column(name = "avg_buy_price", nullable = false, precision = 19, scale = 8)
     private BigDecimal avgBuyPrice;
 
-    @Column(name = "last_mark_price", precision = 19, scale = 8)
-    private BigDecimal lastMarkPrice;
-
-    @Column(name = "unrealized_pnl", precision = 19, scale = 4)
-    private BigDecimal unrealizedPnl;
-
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
@@ -87,22 +81,6 @@ public class PortfolioPositionEntity {
 
     public void setAvgBuyPrice(BigDecimal avgBuyPrice) {
         this.avgBuyPrice = avgBuyPrice;
-    }
-
-    public BigDecimal getLastMarkPrice() {
-        return lastMarkPrice;
-    }
-
-    public void setLastMarkPrice(BigDecimal lastMarkPrice) {
-        this.lastMarkPrice = lastMarkPrice;
-    }
-
-    public BigDecimal getUnrealizedPnl() {
-        return unrealizedPnl;
-    }
-
-    public void setUnrealizedPnl(BigDecimal unrealizedPnl) {
-        this.unrealizedPnl = unrealizedPnl;
     }
 
     public OffsetDateTime getUpdatedAt() {
