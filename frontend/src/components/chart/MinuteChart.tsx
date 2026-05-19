@@ -267,6 +267,7 @@ export default function MinuteChart({
 
     for (const slot of overlaySeriesData) {
       const series = chartRef.current.addSeries(LineSeries, {
+        priceScaleId: "",
         color: slot.color,
         lineVisible: false,
         lineWidth: 1,
@@ -277,6 +278,7 @@ export default function MinuteChart({
       });
       series.setData(slot.points);
       const markers = createSeriesMarkers(series, slot.markers, {
+        autoScale: false,
         zOrder: "top",
       });
       overlaySeriesRefs.current.push({
