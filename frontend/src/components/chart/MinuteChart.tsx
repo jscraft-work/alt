@@ -4,6 +4,7 @@ import {
   ColorType,
   HistogramSeries,
   type IChartApi,
+  type LineData,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type LogicalRange,
@@ -12,6 +13,7 @@ import {
   type UTCTimestamp,
   createChart,
   createSeriesMarkers,
+  LineSeries,
 } from "lightweight-charts";
 import type {
   CandlestickData,
@@ -44,7 +46,7 @@ export default function MinuteChart({
   const candleSeriesRef =
     useRef<ISeriesApi<"Candlestick", Time> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram", Time> | null>(null);
-  const markerPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const overlaySeriesRefs = useRef<OverlaySeriesBinding[]>([]);
   const hasInitialViewRef = useRef(false);
   const loadRequestBlockedRef = useRef(false);
   const lastDataSignatureRef = useRef<string>("");
@@ -60,8 +62,8 @@ export default function MinuteChart({
     () => bars.map(toVolumeData),
     [bars],
   );
-  const markerData = useMemo(
-    () => buildOrderMarkers(bars, overlays, focusedOverlayId),
+  const overlaySeriesData = useMemo(
+    () => buildOverlaySeriesData(bars, overlays, focusedOverlayId),
     [bars, overlays, focusedOverlayId],
   );
 
@@ -170,10 +172,6 @@ export default function MinuteChart({
       },
     });
 
-    const markerPlugin = createSeriesMarkers(candleSeries, [], {
-      zOrder: "top",
-    });
-
     const handleVisibleRangeChange = (range: LogicalRange | null) => {
       previousVisibleRangeRef.current = range;
 
@@ -198,13 +196,13 @@ export default function MinuteChart({
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
-    markerPluginRef.current = markerPlugin;
+    overlaySeriesRefs.current = [];
 
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(
         handleVisibleRangeChange,
       );
-      markerPluginRef.current = null;
+      overlaySeriesRefs.current = [];
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       chartRef.current = null;
@@ -216,15 +214,13 @@ export default function MinuteChart({
     if (
       !chartRef.current ||
       !candleSeriesRef.current ||
-      !volumeSeriesRef.current ||
-      !markerPluginRef.current
+      !volumeSeriesRef.current
     ) {
       return;
     }
 
     candleSeriesRef.current.setData(candleData);
     volumeSeriesRef.current.setData(volumeData);
-    markerPluginRef.current.setMarkers(markerData);
 
     const signature = buildDataSignature(bars);
     const previousFirstBarTime = previousFirstBarTimeRef.current;
@@ -257,7 +253,38 @@ export default function MinuteChart({
     lastDataSignatureRef.current = signature;
     previousFirstBarTimeRef.current = firstBarTime;
     previousBarCountRef.current = bars.length;
-  }, [bars, candleData, markerData, volumeData]);
+  }, [bars, candleData, volumeData]);
+
+  useEffect(() => {
+    if (!chartRef.current) {
+      return;
+    }
+
+    for (const binding of overlaySeriesRefs.current) {
+      chartRef.current.removeSeries(binding.series);
+    }
+    overlaySeriesRefs.current = [];
+
+    for (const slot of overlaySeriesData) {
+      const series = chartRef.current.addSeries(LineSeries, {
+        color: slot.color,
+        lineVisible: false,
+        lineWidth: 1,
+        pointMarkersVisible: false,
+        crosshairMarkerVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+      series.setData(slot.points);
+      const markers = createSeriesMarkers(series, slot.markers, {
+        zOrder: "top",
+      });
+      overlaySeriesRefs.current.push({
+        series,
+        markers,
+      });
+    }
+  }, [overlaySeriesData]);
 
   useEffect(() => {
     if (!isLoadingMoreHistory) {
@@ -463,40 +490,56 @@ function normalizeCssColor(input: string) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function buildOrderMarkers(
+function buildOverlaySeriesData(
   bars: MinuteBar[],
   overlays: ChartOrderOverlay[],
   focusedOverlayId: string | null,
-): SeriesMarker<UTCTimestamp>[] {
+): OverlaySeriesInput[] {
   if (bars.length === 0 || overlays.length === 0) {
     return [];
   }
 
   const barLookup = buildBarLookup(bars);
-  const duplicates = new Map<string, number>();
+  const grouped = new Map<string, OverlayPlacement[]>();
 
-  return overlays
-    .map((overlay) => {
-      const placement = resolveOverlayPlacement(barLookup, overlay);
-      if (!placement) {
-        return null;
-      }
+  for (const overlay of overlays) {
+    const placement = resolveOverlayPlacement(barLookup, overlay);
+    if (!placement) {
+      continue;
+    }
+    const bucketKey = `${placement.time}:${placement.side}`;
+    const bucket = grouped.get(bucketKey);
+    if (bucket) {
+      bucket.push(placement);
+    } else {
+      grouped.set(bucketKey, [placement]);
+    }
+  }
 
-      const side = overlay.side === "BUY" ? "BUY" : "SELL";
-      const duplicateKey = `${placement.time}:${side}:${placement.basePrice}`;
-      const duplicateIndex = duplicates.get(duplicateKey) ?? 0;
-      duplicates.set(duplicateKey, duplicateIndex + 1);
+  const slots = new Map<string, OverlaySeriesInput>();
+  for (const placements of grouped.values()) {
+    placements
+      .sort((left, right) => left.eventTime - right.eventTime)
+      .forEach((placement, slotIndex) => {
+        const slotKey = `${placement.side}:${slotIndex}`;
+        const slot = slots.get(slotKey) ?? createOverlaySlot(slotKey, placement.side);
+        const price = computeOverlaySlotPrice(placement, slotIndex);
+        slot.points.push({
+          time: placement.time,
+          value: price,
+        });
+        slot.markers.push(
+          toOrderMarker(
+            placement,
+            price,
+            placement.overlay.tradeOrderId === focusedOverlayId,
+          ),
+        );
+        slots.set(slotKey, slot);
+      });
+  }
 
-      return toOrderMarker(
-        overlay,
-        side,
-        placement.time,
-        placement.basePrice,
-        duplicateIndex,
-        overlay.tradeOrderId === focusedOverlayId,
-      );
-    })
-    .filter((marker): marker is SeriesMarker<UTCTimestamp> => marker !== null);
+  return Array.from(slots.values());
 }
 
 function findBarTimeAtOrBefore(
@@ -552,12 +595,19 @@ function resolveOverlayPlacement(
   }
 
   const requestedPrice = overlay.avgFilledPrice ?? overlay.requestedPrice;
+  const side: "BUY" | "SELL" = overlay.side === "BUY" ? "BUY" : "SELL";
   const fallbackPrice =
-    overlay.side === "BUY" ? entry.bar.lowPrice : entry.bar.highPrice;
+    side === "BUY" ? entry.bar.lowPrice : entry.bar.highPrice;
 
   return {
+    overlay,
+    eventTime,
+    side,
     time: snappedTime,
     barIndex: entry.index,
+    highPrice: entry.bar.highPrice,
+    lowPrice: entry.bar.lowPrice,
+    closePrice: entry.bar.closePrice,
     basePrice: requestedPrice ?? fallbackPrice,
   };
 }
@@ -578,33 +628,76 @@ function resolveFocusedOverlayTarget(
 }
 
 function toOrderMarker(
-  overlay: ChartOrderOverlay,
-  side: "BUY" | "SELL",
-  time: UTCTimestamp,
-  basePrice: number,
-  duplicateIndex: number,
+  placement: OverlayPlacement,
+  price: number,
   isFocused: boolean,
 ): SeriesMarker<UTCTimestamp> {
-  const isBuy = side === "BUY";
-  const priceStep = Math.max(Math.abs(basePrice) * 0.0015, 1);
-  const adjustedPrice = isBuy
-    ? Math.max(basePrice - duplicateIndex * priceStep, 0)
-    : basePrice + duplicateIndex * priceStep;
+  const isBuy = placement.side === "BUY";
 
   return {
-    id: overlay.tradeOrderId,
-    time,
-    position: isBuy ? "atPriceBottom" : "atPriceTop",
-    price: adjustedPrice,
+    id: placement.overlay.tradeOrderId,
+    time: placement.time,
+    position: "inBar",
     shape: isBuy ? "arrowUp" : "arrowDown",
     color: isFocused
       ? (isBuy ? "#1d4ed8" : "#b91c1c")
       : (isBuy ? "#3498db" : "#e74c3c"),
     size: isFocused ? 2 : 1,
-    text: isFocused ? side : undefined,
+    price,
+    text: isFocused ? placement.side : undefined,
   };
 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function createOverlaySlot(
+  key: string,
+  side: "BUY" | "SELL",
+): OverlaySeriesInput {
+  return {
+    key,
+    side,
+    color: side === "BUY" ? "#3498db" : "#e74c3c",
+    points: [],
+    markers: [],
+  };
+}
+
+function computeOverlaySlotPrice(
+  placement: OverlayPlacement,
+  slotIndex: number,
+) {
+  const barSpan = Math.max(placement.highPrice - placement.lowPrice, 1);
+  const step = Math.max(barSpan * 0.18, placement.closePrice * 0.0015, 1);
+  if (placement.side === "BUY") {
+    return Math.max(placement.lowPrice - step * (slotIndex + 1), 0);
+  }
+  return placement.highPrice + step * (slotIndex + 1);
+}
+
+interface OverlayPlacement {
+  overlay: ChartOrderOverlay;
+  eventTime: UTCTimestamp;
+  side: "BUY" | "SELL";
+  time: UTCTimestamp;
+  barIndex: number;
+  highPrice: number;
+  lowPrice: number;
+  closePrice: number;
+  basePrice: number;
+}
+
+interface OverlaySeriesInput {
+  key: string;
+  side: "BUY" | "SELL";
+  color: string;
+  points: LineData<UTCTimestamp>[];
+  markers: SeriesMarker<UTCTimestamp>[];
+}
+
+interface OverlaySeriesBinding {
+  series: ISeriesApi<"Line", Time>;
+  markers: ISeriesMarkersPluginApi<Time>;
 }
