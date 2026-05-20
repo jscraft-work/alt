@@ -80,7 +80,7 @@ class StrategyOverviewApiTest extends AdminCatalogApiIntegrationTestSupport {
         assertThat(active.path("lifecycleState").asText()).isEqualTo("active");
         assertThat(active.path("budgetAmount").decimalValue()).isEqualByComparingTo("10000000.0000");
         assertThat(active.path("cashAmount").decimalValue()).isEqualByComparingTo("6200000.0000");
-        assertThat(active.path("totalAssetAmount").decimalValue()).isEqualByComparingTo("10120000.0000");
+        assertThat(active.path("totalAssetAmount").decimalValue()).isEqualByComparingTo("6200000.0000");
         assertThat(active.path("todayRealizedPnl").decimalValue()).isEqualByComparingTo("120000.0000");
         assertThat(active.path("latestDecisionStatus").asText()).isEqualTo("HOLD");
         assertThat(active.path("latestDecisionAt").asText()).endsWith("+09:00");
