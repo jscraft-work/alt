@@ -4,7 +4,6 @@ import {
   ColorType,
   HistogramSeries,
   type IChartApi,
-  type LineData,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type LogicalRange,
@@ -13,12 +12,8 @@ import {
   type UTCTimestamp,
   createChart,
   createSeriesMarkers,
-  LineSeries,
 } from "lightweight-charts";
-import type {
-  CandlestickData,
-  HistogramData,
-} from "lightweight-charts";
+import type { CandlestickData, HistogramData } from "lightweight-charts";
 import type { ChartOrderOverlay, MinuteBar } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +22,6 @@ const HISTORY_LOAD_THRESHOLD = 24;
 interface MinuteChartProps {
   bars: MinuteBar[];
   overlays: ChartOrderOverlay[];
-  focusedOverlayId?: string | null;
   className?: string;
   isLoadingMoreHistory?: boolean;
   onRequestOlderHistory?: () => void;
@@ -36,7 +30,6 @@ interface MinuteChartProps {
 export default function MinuteChart({
   bars,
   overlays,
-  focusedOverlayId = null,
   className,
   isLoadingMoreHistory = false,
   onRequestOlderHistory,
@@ -46,25 +39,19 @@ export default function MinuteChart({
   const candleSeriesRef =
     useRef<ISeriesApi<"Candlestick", Time> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram", Time> | null>(null);
-  const overlaySeriesRefs = useRef<OverlaySeriesBinding[]>([]);
+  const markerPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const hasInitialViewRef = useRef(false);
   const loadRequestBlockedRef = useRef(false);
-  const lastDataSignatureRef = useRef<string>("");
   const previousVisibleRangeRef = useRef<LogicalRange | null>(null);
   const previousFirstBarTimeRef = useRef<string | null>(null);
   const previousBarCountRef = useRef(0);
+  const lastBarIndexRef = useRef(-1);
 
-  const candleData = useMemo(
-    () => bars.map(toCandlestickData),
-    [bars],
-  );
-  const volumeData = useMemo(
-    () => bars.map(toVolumeData),
-    [bars],
-  );
-  const overlaySeriesData = useMemo(
-    () => buildOverlaySeriesData(bars, overlays, focusedOverlayId),
-    [bars, overlays, focusedOverlayId],
+  const candleData = useMemo(() => bars.map(toCandlestickData), [bars]);
+  const volumeData = useMemo(() => bars.map(toVolumeData), [bars]);
+  const markerData = useMemo(
+    () => buildOrderMarkers(bars, overlays),
+    [bars, overlays],
   );
 
   useEffect(() => {
@@ -73,7 +60,6 @@ export default function MinuteChart({
     }
 
     const palette = resolveChartPalette();
-
     const chart = createChart(containerRef.current, {
       autoSize: true,
       height: 420,
@@ -104,7 +90,6 @@ export default function MinuteChart({
         barSpacing: 9,
         minBarSpacing: 2.5,
         rightOffset: 0,
-        fixLeftEdge: true,
         fixRightEdge: true,
         tickMarkFormatter: formatTickMark,
         timeVisible: true,
@@ -172,11 +157,26 @@ export default function MinuteChart({
       },
     });
 
-    const handleVisibleRangeChange = (range: LogicalRange | null) => {
-      previousVisibleRangeRef.current = range;
+    const markerPlugin = createSeriesMarkers(candleSeries, [], {
+      autoScale: false,
+      zOrder: "top",
+    });
 
+    const handleVisibleRangeChange = (range: LogicalRange | null) => {
+      if (range === null) {
+        previousVisibleRangeRef.current = null;
+        return;
+      }
+
+      const clampedRange = clampFutureRange(range, lastBarIndexRef.current);
+      if (clampedRange !== null) {
+        previousVisibleRangeRef.current = clampedRange;
+        chart.timeScale().setVisibleLogicalRange(clampedRange);
+        return;
+      }
+
+      previousVisibleRangeRef.current = range;
       if (
-        range === null ||
         !onRequestOlderHistory ||
         isLoadingMoreHistory ||
         loadRequestBlockedRef.current
@@ -196,13 +196,13 @@ export default function MinuteChart({
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
-    overlaySeriesRefs.current = [];
+    markerPluginRef.current = markerPlugin;
 
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(
         handleVisibleRangeChange,
       );
-      overlaySeriesRefs.current = [];
+      markerPluginRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       chartRef.current = null;
@@ -214,15 +214,17 @@ export default function MinuteChart({
     if (
       !chartRef.current ||
       !candleSeriesRef.current ||
-      !volumeSeriesRef.current
+      !volumeSeriesRef.current ||
+      !markerPluginRef.current
     ) {
       return;
     }
 
     candleSeriesRef.current.setData(candleData);
     volumeSeriesRef.current.setData(volumeData);
+    markerPluginRef.current.setMarkers(markerData);
+    lastBarIndexRef.current = bars.length - 1;
 
-    const signature = buildDataSignature(bars);
     const previousFirstBarTime = previousFirstBarTimeRef.current;
     const previousBarCount = previousBarCountRef.current;
     const firstBarTime = bars[0]?.barTime ?? null;
@@ -239,91 +241,21 @@ export default function MinuteChart({
         from: previousVisibleRangeRef.current.from + prependedBarCount,
         to: previousVisibleRangeRef.current.to + prependedBarCount,
       });
-    } else if (signature !== lastDataSignatureRef.current) {
-      const currentRange = chartRef.current.timeScale().getVisibleLogicalRange();
-      if (currentRange !== null) {
-        previousVisibleRangeRef.current = currentRange;
-      }
     }
 
     if (bars.length > previousBarCount || firstBarTime !== previousFirstBarTime) {
       loadRequestBlockedRef.current = false;
     }
 
-    lastDataSignatureRef.current = signature;
     previousFirstBarTimeRef.current = firstBarTime;
     previousBarCountRef.current = bars.length;
-  }, [bars, candleData, volumeData]);
-
-  useEffect(() => {
-    if (!chartRef.current) {
-      return;
-    }
-
-    for (const binding of overlaySeriesRefs.current) {
-      chartRef.current.removeSeries(binding.series);
-    }
-    overlaySeriesRefs.current = [];
-
-    for (const slot of overlaySeriesData) {
-      const series = chartRef.current.addSeries(LineSeries, {
-        priceScaleId: "",
-        color: slot.color,
-        lineVisible: false,
-        lineWidth: 1,
-        pointMarkersVisible: false,
-        crosshairMarkerVisible: false,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      });
-      series.setData(slot.points);
-      const markers = createSeriesMarkers(series, slot.markers, {
-        autoScale: false,
-        zOrder: "top",
-      });
-      overlaySeriesRefs.current.push({
-        series,
-        markers,
-      });
-    }
-  }, [overlaySeriesData]);
+  }, [bars, candleData, markerData, volumeData]);
 
   useEffect(() => {
     if (!isLoadingMoreHistory) {
       loadRequestBlockedRef.current = false;
     }
   }, [isLoadingMoreHistory]);
-
-  useEffect(() => {
-    if (!chartRef.current || !focusedOverlayId || bars.length === 0) {
-      return;
-    }
-
-    const focusTarget = resolveFocusedOverlayTarget(
-      bars,
-      overlays,
-      focusedOverlayId,
-    );
-    if (!focusTarget) {
-      return;
-    }
-
-    const currentRange = chartRef.current.timeScale().getVisibleLogicalRange();
-    const windowSize =
-      currentRange === null
-        ? Math.min(Math.max(bars.length - 1, 30), 180)
-        : Math.max(currentRange.to - currentRange.from, 30);
-    const targetIndex = focusTarget.barIndex;
-    const maxTo = Math.max(bars.length - 1, 0);
-    const maxFrom = Math.max(maxTo - windowSize, 0);
-    const nextFrom = clamp(targetIndex - windowSize / 2, 0, maxFrom);
-    const nextTo = Math.min(nextFrom + windowSize, maxTo);
-
-    chartRef.current.timeScale().setVisibleLogicalRange({
-      from: nextFrom,
-      to: nextTo,
-    });
-  }, [bars, overlays, focusedOverlayId]);
 
   return (
     <div
@@ -349,9 +281,8 @@ export default function MinuteChart({
         </div>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        매수 마커는 위 화살표, 매도 마커는 아래 화살표로 표시됩니다. 우측 주문
-        목록에서 항목을 누르면 해당 시점으로 차트를 이동합니다. 차트 왼쪽 끝으로
-        이동하면 과거 구간을 자동으로 더 불러옵니다.
+        매수 마커는 위 화살표, 매도 마커는 아래 화살표로 표시됩니다. 차트 왼쪽
+        끝으로 이동하면 과거 구간을 자동으로 더 불러옵니다.
       </p>
     </div>
   );
@@ -376,8 +307,77 @@ function toVolumeData(bar: MinuteBar): HistogramData<UTCTimestamp> {
   };
 }
 
+function buildOrderMarkers(
+  bars: MinuteBar[],
+  overlays: ChartOrderOverlay[],
+): SeriesMarker<UTCTimestamp>[] {
+  if (bars.length === 0 || overlays.length === 0) {
+    return [];
+  }
+
+  const barTimes = bars.map((bar) => toUtcTimestamp(bar.barTime));
+  return overlays
+    .map((overlay) => toOrderMarker(barTimes, overlay))
+    .filter((marker): marker is SeriesMarker<UTCTimestamp> => marker !== null)
+    .sort((left, right) => left.time - right.time);
+}
+
+function toOrderMarker(
+  barTimes: UTCTimestamp[],
+  overlay: ChartOrderOverlay,
+): SeriesMarker<UTCTimestamp> | null {
+  const eventTime = toUtcTimestamp(overlay.filledAt ?? overlay.requestedAt);
+  const snappedTime = findBarTimeAtOrBefore(barTimes, eventTime);
+  if (snappedTime === null) {
+    return null;
+  }
+
+  const isBuy = overlay.side === "BUY";
+  return {
+    id: overlay.tradeOrderId,
+    time: snappedTime,
+    position: isBuy ? "belowBar" : "aboveBar",
+    shape: isBuy ? "arrowUp" : "arrowDown",
+    color: isBuy ? "#3498db" : "#e74c3c",
+  };
+}
+
 function toUtcTimestamp(isoValue: string): UTCTimestamp {
   return Math.floor(new Date(isoValue).getTime() / 1000) as UTCTimestamp;
+}
+
+function findBarTimeAtOrBefore(
+  barTimes: UTCTimestamp[],
+  targetTime: UTCTimestamp,
+): UTCTimestamp | null {
+  let low = 0;
+  let high = barTimes.length - 1;
+  let candidate: UTCTimestamp | null = null;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const time = barTimes[mid];
+    if (time <= targetTime) {
+      candidate = time;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return candidate;
+}
+
+function clampFutureRange(range: LogicalRange, lastIndex: number) {
+  if (lastIndex < 0 || range.to <= lastIndex) {
+    return null;
+  }
+
+  const width = range.to - range.from;
+  return {
+    from: (lastIndex - width) as LogicalRange["from"],
+    to: lastIndex as LogicalRange["to"],
+  };
 }
 
 function formatTickMark(time: Time) {
@@ -420,12 +420,6 @@ function toDate(time: Time): Date | null {
     return new Date(Date.UTC(time.year, time.month - 1, time.day));
   }
   return null;
-}
-
-function buildDataSignature(bars: MinuteBar[]) {
-  const first = bars[0]?.barTime ?? "";
-  const last = bars[bars.length - 1]?.barTime ?? "";
-  return `${bars.length}:${first}:${last}`;
 }
 
 function countPrependedBars(
@@ -490,216 +484,4 @@ function normalizeCssColor(input: string) {
   const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
   const alpha = Number((a / 255).toFixed(4));
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function buildOverlaySeriesData(
-  bars: MinuteBar[],
-  overlays: ChartOrderOverlay[],
-  focusedOverlayId: string | null,
-): OverlaySeriesInput[] {
-  if (bars.length === 0 || overlays.length === 0) {
-    return [];
-  }
-
-  const barLookup = buildBarLookup(bars);
-  const grouped = new Map<string, OverlayPlacement[]>();
-
-  for (const overlay of overlays) {
-    const placement = resolveOverlayPlacement(barLookup, overlay);
-    if (!placement) {
-      continue;
-    }
-    const bucketKey = `${placement.time}:${placement.side}`;
-    const bucket = grouped.get(bucketKey);
-    if (bucket) {
-      bucket.push(placement);
-    } else {
-      grouped.set(bucketKey, [placement]);
-    }
-  }
-
-  const slots = new Map<string, OverlaySeriesInput>();
-  for (const placements of grouped.values()) {
-    placements
-      .sort((left, right) => left.eventTime - right.eventTime)
-      .forEach((placement, slotIndex) => {
-        const slotKey = `${placement.side}:${slotIndex}`;
-        const slot = slots.get(slotKey) ?? createOverlaySlot(slotKey, placement.side);
-        const price = computeOverlaySlotPrice(placement, slotIndex);
-        slot.points.push({
-          time: placement.time,
-          value: price,
-        });
-        slot.markers.push(
-          toOrderMarker(
-            placement,
-            price,
-            placement.overlay.tradeOrderId === focusedOverlayId,
-          ),
-        );
-        slots.set(slotKey, slot);
-      });
-  }
-
-  return Array.from(slots.values());
-}
-
-function findBarTimeAtOrBefore(
-  barTimes: UTCTimestamp[],
-  targetTime: UTCTimestamp,
-): UTCTimestamp | null {
-  let low = 0;
-  let high = barTimes.length - 1;
-  let candidate: UTCTimestamp | null = null;
-
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const time = barTimes[mid];
-    if (time <= targetTime) {
-      candidate = time;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-
-  return candidate;
-}
-
-function buildBarLookup(bars: MinuteBar[]) {
-  const entries = bars.map((bar, index) => {
-    const time = toUtcTimestamp(bar.barTime);
-    return {
-      time,
-      index,
-      bar,
-    };
-  });
-  return {
-    entries,
-    times: entries.map((entry) => entry.time),
-  };
-}
-
-function resolveOverlayPlacement(
-  barLookup: ReturnType<typeof buildBarLookup>,
-  overlay: ChartOrderOverlay,
-) {
-  const eventTime = toUtcTimestamp(overlay.filledAt ?? overlay.requestedAt);
-  const snappedTime = findBarTimeAtOrBefore(barLookup.times, eventTime);
-  if (snappedTime === null) {
-    return null;
-  }
-
-  const entry = barLookup.entries.find((candidate) => candidate.time === snappedTime);
-  if (!entry) {
-    return null;
-  }
-
-  const requestedPrice = overlay.avgFilledPrice ?? overlay.requestedPrice;
-  const side: "BUY" | "SELL" = overlay.side === "BUY" ? "BUY" : "SELL";
-  const fallbackPrice =
-    side === "BUY" ? entry.bar.lowPrice : entry.bar.highPrice;
-
-  return {
-    overlay,
-    eventTime,
-    side,
-    time: snappedTime,
-    barIndex: entry.index,
-    highPrice: entry.bar.highPrice,
-    lowPrice: entry.bar.lowPrice,
-    closePrice: entry.bar.closePrice,
-    basePrice: requestedPrice ?? fallbackPrice,
-  };
-}
-
-function resolveFocusedOverlayTarget(
-  bars: MinuteBar[],
-  overlays: ChartOrderOverlay[],
-  focusedOverlayId: string,
-) {
-  const barLookup = buildBarLookup(bars);
-  const overlay = overlays.find(
-    (candidate) => candidate.tradeOrderId === focusedOverlayId,
-  );
-  if (!overlay) {
-    return null;
-  }
-  return resolveOverlayPlacement(barLookup, overlay);
-}
-
-function toOrderMarker(
-  placement: OverlayPlacement,
-  price: number,
-  isFocused: boolean,
-): SeriesMarker<UTCTimestamp> {
-  const isBuy = placement.side === "BUY";
-
-  return {
-    id: placement.overlay.tradeOrderId,
-    time: placement.time,
-    position: "inBar",
-    shape: isBuy ? "arrowUp" : "arrowDown",
-    color: isFocused
-      ? (isBuy ? "#1d4ed8" : "#b91c1c")
-      : (isBuy ? "#3498db" : "#e74c3c"),
-    size: isFocused ? 2 : 1,
-    price,
-    text: isFocused ? placement.side : undefined,
-  };
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function createOverlaySlot(
-  key: string,
-  side: "BUY" | "SELL",
-): OverlaySeriesInput {
-  return {
-    key,
-    side,
-    color: side === "BUY" ? "#3498db" : "#e74c3c",
-    points: [],
-    markers: [],
-  };
-}
-
-function computeOverlaySlotPrice(
-  placement: OverlayPlacement,
-  slotIndex: number,
-) {
-  const barSpan = Math.max(placement.highPrice - placement.lowPrice, 1);
-  const step = Math.max(barSpan * 0.18, placement.closePrice * 0.0015, 1);
-  if (placement.side === "BUY") {
-    return Math.max(placement.lowPrice - step * (slotIndex + 1), 0);
-  }
-  return placement.highPrice + step * (slotIndex + 1);
-}
-
-interface OverlayPlacement {
-  overlay: ChartOrderOverlay;
-  eventTime: UTCTimestamp;
-  side: "BUY" | "SELL";
-  time: UTCTimestamp;
-  barIndex: number;
-  highPrice: number;
-  lowPrice: number;
-  closePrice: number;
-  basePrice: number;
-}
-
-interface OverlaySeriesInput {
-  key: string;
-  side: "BUY" | "SELL";
-  color: string;
-  points: LineData<UTCTimestamp>[];
-  markers: SeriesMarker<UTCTimestamp>[];
-}
-
-interface OverlaySeriesBinding {
-  series: ISeriesApi<"Line", Time>;
-  markers: ISeriesMarkersPluginApi<Time>;
 }
