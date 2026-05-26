@@ -89,6 +89,7 @@ export default function MinuteChart({
           new Intl.NumberFormat("ko-KR", {
             maximumFractionDigits: 0,
           }).format(price),
+        timeFormatter: formatCrosshairTime,
       },
       rightPriceScale: {
         borderColor: palette.border,
@@ -503,6 +504,25 @@ function formatTickMark(time: Time) {
   const minute = parts.find((part) => part.type === "minute")?.value ?? "";
 
   return `${month}.${day} ${hour}:${minute}`;
+}
+
+function formatCrosshairTime(time: Time) {
+  const date = toDate(time);
+  if (!date) {
+    return "";
+  }
+
+  const formatter = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "2-digit",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  return formatter.format(date);
 }
 
 function toDate(time: Time): Date | null {
