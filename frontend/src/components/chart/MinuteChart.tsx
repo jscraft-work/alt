@@ -175,7 +175,10 @@ export default function MinuteChart({
         return;
       }
 
-      previousVisibleRangeRef.current = range;
+      const barsInfo = candleSeries.barsInLogicalRange(range);
+      if (isSafeRestoreRange(barsInfo)) {
+        previousVisibleRangeRef.current = range;
+      }
       if (
         !onRequestOlderHistory ||
         isLoadingMoreHistory ||
@@ -184,7 +187,6 @@ export default function MinuteChart({
         return;
       }
 
-      const barsInfo = candleSeries.barsInLogicalRange(range);
       if (barsInfo && barsInfo.barsBefore < HISTORY_LOAD_THRESHOLD) {
         loadRequestBlockedRef.current = true;
         onRequestOlderHistory();
@@ -338,7 +340,7 @@ function toOrderMarker(
     time: snappedTime,
     position: isBuy ? "belowBar" : "aboveBar",
     shape: isBuy ? "arrowUp" : "arrowDown",
-    color: isBuy ? "#3498db" : "#e74c3c",
+    color: isBuy ? "#10b981" : "#f59e0b",
   };
 }
 
@@ -378,6 +380,12 @@ function clampFutureRange(range: LogicalRange, lastIndex: number) {
     from: (lastIndex - width) as LogicalRange["from"],
     to: lastIndex as LogicalRange["to"],
   };
+}
+
+function isSafeRestoreRange(
+  barsInfo: ReturnType<ISeriesApi<"Candlestick", Time>["barsInLogicalRange"]>,
+) {
+  return barsInfo !== null && barsInfo.barsBefore >= 0;
 }
 
 function formatTickMark(time: Time) {
