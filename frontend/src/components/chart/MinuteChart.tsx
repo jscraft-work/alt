@@ -17,12 +17,13 @@ import type { CandlestickData, HistogramData } from "lightweight-charts";
 import type { ChartOrderOverlay, MinuteBar } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
-const HISTORY_LOAD_THRESHOLD = 24;
+const MIN_HISTORY_LOAD_THRESHOLD = 120;
 
 interface MinuteChartProps {
   bars: MinuteBar[];
   overlays: ChartOrderOverlay[];
   className?: string;
+  canLoadOlderHistory?: boolean;
   isLoadingMoreHistory?: boolean;
   onRequestOlderHistory?: () => void;
 }
@@ -31,6 +32,7 @@ export default function MinuteChart({
   bars,
   overlays,
   className,
+  canLoadOlderHistory = true,
   isLoadingMoreHistory = false,
   onRequestOlderHistory,
 }: MinuteChartProps) {
@@ -176,6 +178,13 @@ export default function MinuteChart({
       }
 
       const barsInfo = candleSeries.barsInLogicalRange(range);
+      const clampedPastRange = clampPastRange(range, barsInfo, canLoadOlderHistory);
+      if (clampedPastRange !== null) {
+        previousVisibleRangeRef.current = clampedPastRange;
+        chart.timeScale().setVisibleLogicalRange(clampedPastRange);
+        return;
+      }
+
       if (isSafeRestoreRange(barsInfo)) {
         previousVisibleRangeRef.current = range;
       }
@@ -187,7 +196,8 @@ export default function MinuteChart({
         return;
       }
 
-      if (barsInfo && barsInfo.barsBefore < HISTORY_LOAD_THRESHOLD) {
+      const loadThreshold = calculateHistoryLoadThreshold(range);
+      if (barsInfo && barsInfo.barsBefore < loadThreshold) {
         loadRequestBlockedRef.current = true;
         onRequestOlderHistory();
       }
@@ -210,7 +220,7 @@ export default function MinuteChart({
       chartRef.current = null;
       chart.remove();
     };
-  }, [isLoadingMoreHistory, onRequestOlderHistory]);
+  }, [canLoadOlderHistory, isLoadingMoreHistory, onRequestOlderHistory]);
 
   useEffect(() => {
     if (
@@ -252,6 +262,28 @@ export default function MinuteChart({
     previousFirstBarTimeRef.current = firstBarTime;
     previousBarCountRef.current = bars.length;
   }, [bars, candleData, markerData, volumeData]);
+
+  useEffect(() => {
+    if (
+      canLoadOlderHistory ||
+      isLoadingMoreHistory ||
+      !chartRef.current ||
+      !candleSeriesRef.current
+    ) {
+      return;
+    }
+
+    const range = chartRef.current.timeScale().getVisibleLogicalRange();
+    if (range === null) {
+      return;
+    }
+    const barsInfo = candleSeriesRef.current.barsInLogicalRange(range);
+    const clampedRange = clampPastRange(range, barsInfo, false);
+    if (clampedRange !== null) {
+      previousVisibleRangeRef.current = clampedRange;
+      chartRef.current.timeScale().setVisibleLogicalRange(clampedRange);
+    }
+  }, [canLoadOlderHistory, isLoadingMoreHistory, bars]);
 
   useEffect(() => {
     if (!isLoadingMoreHistory) {
@@ -380,6 +412,30 @@ function clampFutureRange(range: LogicalRange, lastIndex: number) {
     from: (lastIndex - width) as LogicalRange["from"],
     to: lastIndex as LogicalRange["to"],
   };
+}
+
+function clampPastRange(
+  range: LogicalRange,
+  barsInfo: ReturnType<ISeriesApi<"Candlestick", Time>["barsInLogicalRange"]>,
+  canLoadOlderHistory: boolean,
+) {
+  if (canLoadOlderHistory || range.from >= 0) {
+    return null;
+  }
+  if (barsInfo === null || barsInfo.barsBefore >= 0) {
+    return null;
+  }
+
+  const width = range.to - range.from;
+  return {
+    from: 0 as LogicalRange["from"],
+    to: width as LogicalRange["to"],
+  };
+}
+
+function calculateHistoryLoadThreshold(range: LogicalRange) {
+  const visibleBars = Math.max(0, Math.ceil(range.to - range.from));
+  return Math.max(MIN_HISTORY_LOAD_THRESHOLD, visibleBars);
 }
 
 function isSafeRestoreRange(

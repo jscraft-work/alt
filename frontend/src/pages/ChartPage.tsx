@@ -36,6 +36,7 @@ import { formatKrw, formatKstDateTime, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const ALL_INSTANCES_VALUE = "__all__";
+const HISTORY_LOAD_CHUNK_DAYS = 1;
 
 interface ChartFilters {
   symbolCode: string;
@@ -179,7 +180,10 @@ export default function ChartPage() {
         ? null
         : {
             ...currentRange,
-            dateFrom: shiftKstDate(currentRange.dateFrom, -7),
+            dateFrom: shiftKstDate(
+              currentRange.dateFrom,
+              -HISTORY_LOAD_CHUNK_DAYS,
+            ),
           },
     );
   };
@@ -445,6 +449,7 @@ export default function ChartPage() {
                 <MinuteChart
                   bars={bars}
                   overlays={overlays}
+                  canLoadOlderHistory={canLoadOlderHistory}
                   isLoadingMoreHistory={isLoadingMoreHistory}
                   onRequestOlderHistory={requestOlderHistory}
                 />
