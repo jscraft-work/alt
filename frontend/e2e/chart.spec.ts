@@ -44,6 +44,16 @@ const REAL_KIA_MAY_FIXTURE = JSON.parse(
   bars: MinuteBarFixture[];
   overlays: OverlayFixture[];
 };
+const GAPPED_KAKAO_FIXTURE = {
+  bars: buildFixtureBarsForDays("035720", [
+    "2026-05-19",
+    "2026-05-20",
+    "2026-05-21",
+    "2026-05-22",
+    "2026-05-26",
+  ]),
+  overlays: [] as OverlayFixture[],
+};
 
 test.describe("chart page e2e", () => {
   test("renders chart with overlays and keeps canvases alive after right drag", async ({
@@ -188,6 +198,36 @@ test.describe("chart page e2e", () => {
     await dragChart(page, -900);
     await expectChartRendered(page);
     expect(pageErrors).toEqual([]);
+  });
+
+  test("loads the previous trading day before a weekend gap hides older bars", async ({
+    page,
+  }) => {
+    const minuteRequests: MinuteRequestLog[] = [];
+    await mockFixtureChartApis(
+      page,
+      "035720",
+      "카카오",
+      GAPPED_KAKAO_FIXTURE.bars,
+      GAPPED_KAKAO_FIXTURE.overlays,
+      minuteRequests,
+    );
+
+    await page.goto("/chart");
+    await setSymbolCode(page, "035720");
+    await setAnchorDate(page, "2026-05-26");
+    await waitForChartReady(page);
+
+    await dragLeftUntil(
+      page,
+      () => minuteRequests.some((request) => request.dateFrom <= "2026-05-19"),
+      4,
+    );
+
+    await waitForHistoryLoadingToFinish(page);
+    await expect(
+      page.getByText("2026-05-19 ~ 2026-05-26", { exact: true }),
+    ).toBeVisible();
   });
 });
 
@@ -350,13 +390,31 @@ async function mockRealKiaMayApis(
   page: Page,
   minuteRequests: MinuteRequestLog[] = [],
 ) {
-  await mockBaseChartApis(page, DEFAULT_SYMBOL_CODE, DEFAULT_SYMBOL_NAME);
+  await mockFixtureChartApis(
+    page,
+    DEFAULT_SYMBOL_CODE,
+    DEFAULT_SYMBOL_NAME,
+    REAL_KIA_MAY_FIXTURE.bars,
+    REAL_KIA_MAY_FIXTURE.overlays,
+    minuteRequests,
+  );
+}
+
+async function mockFixtureChartApis(
+  page: Page,
+  symbolCode: string,
+  symbolName: string,
+  barsFixture: MinuteBarFixture[],
+  overlaysFixture: OverlayFixture[],
+  minuteRequests: MinuteRequestLog[] = [],
+) {
+  await mockBaseChartApis(page, symbolCode, symbolName);
 
   await page.route("**/api/charts/order-overlays**", async (route) => {
     const url = new URL(route.request().url());
     const dateFrom = url.searchParams.get("dateFrom") ?? "2026-05-01";
     const dateTo = url.searchParams.get("dateTo") ?? "2026-05-31";
-    const overlays = REAL_KIA_MAY_FIXTURE.overlays.filter((overlay) => {
+    const overlays = overlaysFixture.filter((overlay) => {
       const at = overlay.filledAt ?? overlay.requestedAt;
       const day = at.slice(0, 10);
       return day >= dateFrom && day <= dateTo;
@@ -373,7 +431,7 @@ async function mockRealKiaMayApis(
     const dateFrom = url.searchParams.get("dateFrom") ?? "2026-05-20";
     const dateTo = url.searchParams.get("dateTo") ?? "2026-05-26";
     minuteRequests.push({ dateFrom, dateTo });
-    const bars = REAL_KIA_MAY_FIXTURE.bars.filter((bar) => {
+    const bars = barsFixture.filter((bar) => {
       const day = bar.barTime.slice(0, 10);
       return day >= dateFrom && day <= dateTo;
     });
@@ -382,7 +440,7 @@ async function mockRealKiaMayApis(
       contentType: "application/json",
       body: JSON.stringify({
         data: {
-          symbolCode: DEFAULT_SYMBOL_CODE,
+          symbolCode,
           dateFrom,
           dateTo,
           bars,
@@ -478,6 +536,10 @@ async function waitForChartReady(page: Page) {
 async function setAnchorDate(page: Page, dateText: string) {
   await page.getByLabel("기준일").fill(dateText);
   await page.getByRole("button", { name: "조회" }).click();
+}
+
+async function setSymbolCode(page: Page, symbolCode: string) {
+  await page.getByLabel("종목 코드").fill(symbolCode);
 }
 
 async function waitForHistoryLoadingToFinish(page: Page) {
@@ -675,6 +737,27 @@ function buildMinuteBars(
   }
 
   return bars;
+}
+
+function buildFixtureBarsForDays(
+  symbolCode: string,
+  days: string[],
+) {
+  const allBars: MinuteBarFixture[] = [];
+  let dayIndex = 0;
+
+  for (const day of days) {
+    allBars.push(...buildMinuteBars(symbolCode, day, day).map((bar) => ({
+      ...bar,
+      openPrice: bar.openPrice + dayIndex * 300,
+      highPrice: bar.highPrice + dayIndex * 300,
+      lowPrice: bar.lowPrice + dayIndex * 300,
+      closePrice: bar.closePrice + dayIndex * 300,
+    })));
+    dayIndex++;
+  }
+
+  return allBars;
 }
 
 function uniqueDateFromCount(requests: MinuteRequestLog[]) {

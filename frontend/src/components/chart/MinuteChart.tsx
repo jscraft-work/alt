@@ -18,6 +18,7 @@ import type { ChartOrderOverlay, MinuteBar } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
 const MIN_HISTORY_LOAD_THRESHOLD = 120;
+const TRADING_DAY_BAR_COUNT = 391;
 
 interface MinuteChartProps {
   bars: MinuteBar[];
@@ -211,8 +212,7 @@ export default function MinuteChart({
         return;
       }
 
-      const loadThreshold = calculateHistoryLoadThreshold(range);
-      if (barsInfo && barsInfo.barsBefore < loadThreshold) {
+      if (shouldRequestOlderHistory(range, barsInfo)) {
         loadRequestBlockedRef.current = true;
         onRequestOlderHistoryRef.current();
       }
@@ -473,7 +473,20 @@ function clampPastRange(
 
 function calculateHistoryLoadThreshold(range: LogicalRange) {
   const visibleBars = Math.max(0, Math.ceil(range.to - range.from));
-  return Math.max(MIN_HISTORY_LOAD_THRESHOLD, visibleBars);
+  return Math.max(MIN_HISTORY_LOAD_THRESHOLD, TRADING_DAY_BAR_COUNT, visibleBars);
+}
+
+function shouldRequestOlderHistory(
+  range: LogicalRange,
+  barsInfo: ReturnType<ISeriesApi<"Candlestick", Time>["barsInLogicalRange"]>,
+) {
+  if (range.from <= 0) {
+    return true;
+  }
+  if (barsInfo === null) {
+    return false;
+  }
+  return barsInfo.barsBefore < calculateHistoryLoadThreshold(range);
 }
 
 function isSafeRestoreRange(
