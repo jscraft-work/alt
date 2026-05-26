@@ -28,6 +28,8 @@ public class MarketDailyAggregator {
                    ?
               FROM market_minute_item
              WHERE business_date = ?
+               AND EXTRACT(ISODOW FROM business_date) BETWEEN 1 AND 5
+               AND (bar_time AT TIME ZONE 'Asia/Seoul')::time BETWEEN TIME '09:00' AND TIME '15:30'
              GROUP BY symbol_code, business_date
             ON CONFLICT (symbol_code, business_date, source_name) DO UPDATE SET
                 open_price = EXCLUDED.open_price,
