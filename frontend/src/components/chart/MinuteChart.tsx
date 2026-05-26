@@ -17,14 +17,12 @@ import type { CandlestickData, HistogramData } from "lightweight-charts";
 import type { ChartOrderOverlay, MinuteBar } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
-const MIN_HISTORY_LOAD_THRESHOLD = 120;
-const TRADING_DAY_BAR_COUNT = 391;
+const HISTORY_LOAD_THRESHOLD = 24;
 
 interface MinuteChartProps {
   bars: MinuteBar[];
   overlays: ChartOrderOverlay[];
   className?: string;
-  canLoadOlderHistory?: boolean;
   isLoadingMoreHistory?: boolean;
   onRequestOlderHistory?: () => void;
 }
@@ -33,7 +31,6 @@ export default function MinuteChart({
   bars,
   overlays,
   className,
-  canLoadOlderHistory = true,
   isLoadingMoreHistory = false,
   onRequestOlderHistory,
 }: MinuteChartProps) {
@@ -45,12 +42,10 @@ export default function MinuteChart({
   const markerPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const hasInitialViewRef = useRef(false);
   const loadRequestBlockedRef = useRef(false);
-  const previousVisibleRangeRef = useRef<LogicalRange | null>(null);
   const previousFirstBarTimeRef = useRef<string | null>(null);
   const previousBarCountRef = useRef(0);
   const lastBarIndexRef = useRef(-1);
   const pendingFitFrameRef = useRef<number | null>(null);
-  const canLoadOlderHistoryRef = useRef(canLoadOlderHistory);
   const isLoadingMoreHistoryRef = useRef(isLoadingMoreHistory);
   const onRequestOlderHistoryRef = useRef(onRequestOlderHistory);
 
@@ -62,10 +57,9 @@ export default function MinuteChart({
   );
 
   useEffect(() => {
-    canLoadOlderHistoryRef.current = canLoadOlderHistory;
     isLoadingMoreHistoryRef.current = isLoadingMoreHistory;
     onRequestOlderHistoryRef.current = onRequestOlderHistory;
-  }, [canLoadOlderHistory, isLoadingMoreHistory, onRequestOlderHistory]);
+  }, [isLoadingMoreHistory, onRequestOlderHistory]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -178,32 +172,16 @@ export default function MinuteChart({
 
     const handleVisibleRangeChange = (range: LogicalRange | null) => {
       if (range === null) {
-        previousVisibleRangeRef.current = null;
         return;
       }
 
       const clampedRange = clampFutureRange(range, lastBarIndexRef.current);
       if (clampedRange !== null) {
-        previousVisibleRangeRef.current = clampedRange;
         chart.timeScale().setVisibleLogicalRange(clampedRange);
         return;
       }
 
       const barsInfo = candleSeries.barsInLogicalRange(range);
-      const clampedPastRange = clampPastRange(
-        range,
-        barsInfo,
-        canLoadOlderHistoryRef.current,
-      );
-      if (clampedPastRange !== null) {
-        previousVisibleRangeRef.current = clampedPastRange;
-        chart.timeScale().setVisibleLogicalRange(clampedPastRange);
-        return;
-      }
-
-      if (isSafeRestoreRange(barsInfo)) {
-        previousVisibleRangeRef.current = range;
-      }
       if (
         !onRequestOlderHistoryRef.current ||
         isLoadingMoreHistoryRef.current ||
@@ -259,7 +237,6 @@ export default function MinuteChart({
     const previousFirstBarTime = previousFirstBarTimeRef.current;
     const previousBarCount = previousBarCountRef.current;
     const firstBarTime = bars[0]?.barTime ?? null;
-    const prependedBarCount = countPrependedBars(bars, previousFirstBarTime);
 
     if (
       bars.length > 0 &&
@@ -283,14 +260,6 @@ export default function MinuteChart({
         }
       });
       hasInitialViewRef.current = true;
-    } else if (
-      prependedBarCount > 0 &&
-      previousVisibleRangeRef.current !== null
-    ) {
-      chartRef.current.timeScale().setVisibleLogicalRange({
-        from: previousVisibleRangeRef.current.from + prependedBarCount,
-        to: previousVisibleRangeRef.current.to + prependedBarCount,
-      });
     }
 
     if (bars.length > previousBarCount || firstBarTime !== previousFirstBarTime) {
@@ -300,28 +269,6 @@ export default function MinuteChart({
     previousFirstBarTimeRef.current = firstBarTime;
     previousBarCountRef.current = bars.length;
   }, [bars, candleData, markerData, volumeData]);
-
-  useEffect(() => {
-    if (
-      canLoadOlderHistory ||
-      isLoadingMoreHistory ||
-      !chartRef.current ||
-      !candleSeriesRef.current
-    ) {
-      return;
-    }
-
-    const range = chartRef.current.timeScale().getVisibleLogicalRange();
-    if (range === null) {
-      return;
-    }
-    const barsInfo = candleSeriesRef.current.barsInLogicalRange(range);
-    const clampedRange = clampPastRange(range, barsInfo, false);
-    if (clampedRange !== null) {
-      previousVisibleRangeRef.current = clampedRange;
-      chartRef.current.timeScale().setVisibleLogicalRange(clampedRange);
-    }
-  }, [canLoadOlderHistory, isLoadingMoreHistory, bars]);
 
   useEffect(() => {
     if (!isLoadingMoreHistory) {
@@ -339,6 +286,7 @@ export default function MinuteChart({
       <div className="relative">
         <div
           ref={containerRef}
+          data-testid="minute-chart-surface"
           className="h-[420px] w-full overflow-hidden rounded-lg bg-card"
         />
         <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-2">
@@ -452,30 +400,6 @@ function clampFutureRange(range: LogicalRange, lastIndex: number) {
   };
 }
 
-function clampPastRange(
-  range: LogicalRange,
-  barsInfo: ReturnType<ISeriesApi<"Candlestick", Time>["barsInLogicalRange"]>,
-  canLoadOlderHistory: boolean,
-) {
-  if (canLoadOlderHistory || range.from >= 0) {
-    return null;
-  }
-  if (barsInfo === null || barsInfo.barsBefore >= 0) {
-    return null;
-  }
-
-  const width = range.to - range.from;
-  return {
-    from: 0 as LogicalRange["from"],
-    to: width as LogicalRange["to"],
-  };
-}
-
-function calculateHistoryLoadThreshold(range: LogicalRange) {
-  const visibleBars = Math.max(0, Math.ceil(range.to - range.from));
-  return Math.max(MIN_HISTORY_LOAD_THRESHOLD, TRADING_DAY_BAR_COUNT, visibleBars);
-}
-
 function shouldRequestOlderHistory(
   range: LogicalRange,
   barsInfo: ReturnType<ISeriesApi<"Candlestick", Time>["barsInLogicalRange"]>,
@@ -486,13 +410,7 @@ function shouldRequestOlderHistory(
   if (barsInfo === null) {
     return false;
   }
-  return barsInfo.barsBefore < calculateHistoryLoadThreshold(range);
-}
-
-function isSafeRestoreRange(
-  barsInfo: ReturnType<ISeriesApi<"Candlestick", Time>["barsInLogicalRange"]>,
-) {
-  return barsInfo !== null && barsInfo.barsBefore >= 0;
+  return barsInfo.barsBefore < HISTORY_LOAD_THRESHOLD;
 }
 
 function formatTickMark(time: Time) {
@@ -554,19 +472,6 @@ function toDate(time: Time): Date | null {
     return new Date(Date.UTC(time.year, time.month - 1, time.day));
   }
   return null;
-}
-
-function countPrependedBars(
-  bars: MinuteBar[],
-  previousFirstBarTime: string | null,
-) {
-  if (!previousFirstBarTime || bars.length === 0) {
-    return 0;
-  }
-  const previousStartIndex = bars.findIndex(
-    (bar) => bar.barTime === previousFirstBarTime,
-  );
-  return previousStartIndex > 0 ? previousStartIndex : 0;
 }
 
 function resolveChartPalette() {

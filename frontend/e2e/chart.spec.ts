@@ -11,6 +11,8 @@ type ChartScenario = {
 type MinuteRequestLog = {
   dateFrom: string;
   dateTo: string;
+  returnedBars: number;
+  firstReturnedDay: string | null;
 };
 
 type MinuteBarFixture = {
@@ -46,6 +48,8 @@ const REAL_KIA_MAY_FIXTURE = JSON.parse(
 };
 const GAPPED_KAKAO_FIXTURE = {
   bars: buildFixtureBarsForDays("035720", [
+    "2026-05-15",
+    "2026-05-18",
     "2026-05-19",
     "2026-05-20",
     "2026-05-21",
@@ -122,6 +126,7 @@ test.describe("chart page e2e", () => {
     await dragLeftUntil(
       page,
       () => uniqueDateFromCount(minuteRequests) > beforeCount,
+      8,
     );
 
     await waitForHistoryLoadingToFinish(page);
@@ -200,9 +205,10 @@ test.describe("chart page e2e", () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("loads the previous trading day before a weekend gap hides older bars", async ({
+  test("keeps extending through empty days until the last available trading day", async ({
     page,
   }) => {
+    test.setTimeout(60_000);
     const minuteRequests: MinuteRequestLog[] = [];
     await mockFixtureChartApis(
       page,
@@ -220,14 +226,15 @@ test.describe("chart page e2e", () => {
 
     await dragLeftUntil(
       page,
-      () => minuteRequests.some((request) => request.dateFrom <= "2026-05-19"),
-      4,
+      () => minuteRequests.some((request) => request.dateFrom <= "2026-05-15"),
+      20,
     );
 
     await waitForHistoryLoadingToFinish(page);
-    await expect(
-      page.getByText("2026-05-19 ~ 2026-05-26", { exact: true }),
-    ).toBeVisible();
+    await expectChartRendered(page);
+    expect(
+      minuteRequests.some((request) => request.dateFrom <= "2026-05-15"),
+    ).toBe(true);
   });
 });
 
@@ -356,7 +363,6 @@ async function mockChartApis(
     const url = new URL(route.request().url());
     const dateFrom = url.searchParams.get("dateFrom") ?? "2026-05-20";
     const dateTo = url.searchParams.get("dateTo") ?? "2026-05-26";
-    minuteRequests.push({ dateFrom, dateTo });
 
     if (initialDateFrom === null) {
       initialDateFrom = dateFrom;
@@ -370,6 +376,13 @@ async function mockChartApis(
       compareDates(dateFrom, earliestAvailableDate) < 0
         ? earliestAvailableDate
         : dateFrom;
+    const bars = buildMinuteBars(symbolCode, effectiveDateFrom, dateTo);
+    minuteRequests.push({
+      dateFrom,
+      dateTo,
+      returnedBars: bars.length,
+      firstReturnedDay: bars[0]?.barTime.slice(0, 10) ?? null,
+    });
 
     await route.fulfill({
       status: 200,
@@ -379,7 +392,7 @@ async function mockChartApis(
           symbolCode,
           dateFrom,
           dateTo,
-          bars: buildMinuteBars(symbolCode, effectiveDateFrom, dateTo),
+          bars,
         },
       }),
     });
@@ -430,10 +443,15 @@ async function mockFixtureChartApis(
     const url = new URL(route.request().url());
     const dateFrom = url.searchParams.get("dateFrom") ?? "2026-05-20";
     const dateTo = url.searchParams.get("dateTo") ?? "2026-05-26";
-    minuteRequests.push({ dateFrom, dateTo });
     const bars = barsFixture.filter((bar) => {
       const day = bar.barTime.slice(0, 10);
       return day >= dateFrom && day <= dateTo;
+    });
+    minuteRequests.push({
+      dateFrom,
+      dateTo,
+      returnedBars: bars.length,
+      firstReturnedDay: bars[0]?.barTime.slice(0, 10) ?? null,
     });
     await route.fulfill({
       status: 200,
@@ -646,10 +664,10 @@ async function getChartCanvasStats(page: Page) {
 }
 
 async function dragChart(page: Page, deltaX: number) {
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
+  const surface = page.getByTestId("minute-chart-surface");
+  const box = await surface.boundingBox();
   if (!box) {
-    throw new Error("chart canvas bounding box unavailable");
+    throw new Error("chart surface bounding box unavailable");
   }
 
   const startX = box.x + box.width * 0.55;
@@ -669,7 +687,8 @@ async function dragLeftUntil(
     if (condition()) {
       return;
     }
-    await dragChart(page, -900);
+    await dragChart(page, 900);
+    await waitForHistoryLoadingToFinish(page);
     await page.waitForTimeout(250);
   }
 }

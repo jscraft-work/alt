@@ -63,7 +63,9 @@ export default function ChartPage() {
   const [appliedFilters, setAppliedFilters] = useState<ChartFilters | null>(null);
   const [loadedRange, setLoadedRange] = useState<ChartDateRange | null>(null);
   const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
-  const [canLoadOlderHistory, setCanLoadOlderHistory] = useState(true);
+  const historyLoadLockedRef = useRef(false);
+  const historyChainExpandedRef = useRef(false);
+  const pendingHistoryDateFromRef = useRef<string | null>(null);
   const historySnapshotRef = useRef<{
     earliestBarTime: string | null;
     barCount: number;
@@ -98,13 +100,17 @@ export default function ChartPage() {
     if (!appliedFilters) {
       setLoadedRange(null);
       setIsLoadingMoreHistory(false);
-      setCanLoadOlderHistory(true);
+      historyLoadLockedRef.current = false;
+      historyChainExpandedRef.current = false;
+      pendingHistoryDateFromRef.current = null;
       historySnapshotRef.current = null;
       return;
     }
     setLoadedRange(createSevenDayRange(appliedFilters.date));
     setIsLoadingMoreHistory(false);
-    setCanLoadOlderHistory(true);
+    historyLoadLockedRef.current = false;
+    historyChainExpandedRef.current = false;
+    pendingHistoryDateFromRef.current = null;
     historySnapshotRef.current = null;
   }, [appliedFilters]);
 
@@ -135,21 +141,58 @@ export default function ChartPage() {
   const canSubmit = filters.symbolCode.trim() !== "" && filters.date !== "";
 
   useEffect(() => {
-    if (!isLoadingMoreHistory || minuteBarsQuery.isFetching) {
+    if (!isLoadingMoreHistory || minuteBarsQuery.isFetching || !loadedRange) {
       return;
     }
-
+    if (minuteBarsQuery.data?.dateFrom !== pendingHistoryDateFromRef.current) {
+      return;
+    }
     const snapshot = historySnapshotRef.current;
     const nextBars = minuteBarsQuery.data?.bars ?? [];
     const nextEarliestBarTime = nextBars[0]?.barTime ?? null;
+    const nextEarliestBarDay = nextEarliestBarTime?.slice(0, 10) ?? null;
     const nextBarCount = nextBars.length;
     const expanded =
       snapshot === null ||
       snapshot.earliestBarTime !== nextEarliestBarTime ||
       snapshot.barCount !== nextBarCount;
+    const frontStillEmpty =
+      nextEarliestBarDay === null || nextEarliestBarDay > loadedRange.dateFrom;
 
-    setCanLoadOlderHistory(expanded);
+    if (expanded) {
+      historyChainExpandedRef.current = true;
+    }
+
+    if (!expanded && !historyChainExpandedRef.current) {
+      setIsLoadingMoreHistory(false);
+      historyLoadLockedRef.current = false;
+      historyChainExpandedRef.current = false;
+      pendingHistoryDateFromRef.current = null;
+      historySnapshotRef.current = null;
+      return;
+    }
+
+    if (frontStillEmpty) {
+      const nextDateFrom = shiftKstDate(
+        loadedRange.dateFrom,
+        -HISTORY_LOAD_CHUNK_DAYS,
+      );
+      pendingHistoryDateFromRef.current = nextDateFrom;
+      setLoadedRange((currentRange) =>
+        currentRange === null
+          ? null
+          : {
+              ...currentRange,
+              dateFrom: nextDateFrom,
+            },
+      );
+      return;
+    }
+
     setIsLoadingMoreHistory(false);
+    historyLoadLockedRef.current = false;
+    historyChainExpandedRef.current = false;
+    pendingHistoryDateFromRef.current = null;
     historySnapshotRef.current = null;
   }, [isLoadingMoreHistory, minuteBarsQuery.data, minuteBarsQuery.isFetching]);
 
@@ -158,6 +201,9 @@ export default function ChartPage() {
       return;
     }
     setIsLoadingMoreHistory(false);
+    historyLoadLockedRef.current = false;
+    historyChainExpandedRef.current = false;
+    pendingHistoryDateFromRef.current = null;
     historySnapshotRef.current = null;
   }, [isLoadingMoreHistory, minuteBarsQuery.error]);
 
@@ -166,26 +212,28 @@ export default function ChartPage() {
       !loadedRange ||
       minuteBarsQuery.isFetching ||
       isLoadingMoreHistory ||
-      !canLoadOlderHistory
+      historyLoadLockedRef.current
     ) {
       return;
     }
-    historySnapshotRef.current = {
-      earliestBarTime: bars[0]?.barTime ?? null,
-      barCount: bars.length,
-    };
-    setIsLoadingMoreHistory(true);
-    setLoadedRange((currentRange) =>
-      currentRange === null
-        ? null
-        : {
-            ...currentRange,
-            dateFrom: shiftKstDate(
-              currentRange.dateFrom,
-              -HISTORY_LOAD_CHUNK_DAYS,
-            ),
-          },
+    historyLoadLockedRef.current = true;
+    historyChainExpandedRef.current = false;
+    if (historySnapshotRef.current === null) {
+      historySnapshotRef.current = {
+        earliestBarTime: bars[0]?.barTime ?? null,
+        barCount: bars.length,
+      };
+    }
+    const nextDateFrom = shiftKstDate(
+      loadedRange.dateFrom,
+      -HISTORY_LOAD_CHUNK_DAYS,
     );
+    pendingHistoryDateFromRef.current = nextDateFrom;
+    setIsLoadingMoreHistory(true);
+    setLoadedRange({
+      ...loadedRange,
+      dateFrom: nextDateFrom,
+    });
   };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -449,7 +497,6 @@ export default function ChartPage() {
                 <MinuteChart
                   bars={bars}
                   overlays={overlays}
-                  canLoadOlderHistory={canLoadOlderHistory}
                   isLoadingMoreHistory={isLoadingMoreHistory}
                   onRequestOlderHistory={requestOlderHistory}
                 />
