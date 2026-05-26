@@ -48,6 +48,10 @@ export default function MinuteChart({
   const previousFirstBarTimeRef = useRef<string | null>(null);
   const previousBarCountRef = useRef(0);
   const lastBarIndexRef = useRef(-1);
+  const pendingFitFrameRef = useRef<number | null>(null);
+  const canLoadOlderHistoryRef = useRef(canLoadOlderHistory);
+  const isLoadingMoreHistoryRef = useRef(isLoadingMoreHistory);
+  const onRequestOlderHistoryRef = useRef(onRequestOlderHistory);
 
   const candleData = useMemo(() => bars.map(toCandlestickData), [bars]);
   const volumeData = useMemo(() => bars.map(toVolumeData), [bars]);
@@ -55,6 +59,12 @@ export default function MinuteChart({
     () => buildOrderMarkers(bars, overlays),
     [bars, overlays],
   );
+
+  useEffect(() => {
+    canLoadOlderHistoryRef.current = canLoadOlderHistory;
+    isLoadingMoreHistoryRef.current = isLoadingMoreHistory;
+    onRequestOlderHistoryRef.current = onRequestOlderHistory;
+  }, [canLoadOlderHistory, isLoadingMoreHistory, onRequestOlderHistory]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -178,7 +188,11 @@ export default function MinuteChart({
       }
 
       const barsInfo = candleSeries.barsInLogicalRange(range);
-      const clampedPastRange = clampPastRange(range, barsInfo, canLoadOlderHistory);
+      const clampedPastRange = clampPastRange(
+        range,
+        barsInfo,
+        canLoadOlderHistoryRef.current,
+      );
       if (clampedPastRange !== null) {
         previousVisibleRangeRef.current = clampedPastRange;
         chart.timeScale().setVisibleLogicalRange(clampedPastRange);
@@ -189,8 +203,8 @@ export default function MinuteChart({
         previousVisibleRangeRef.current = range;
       }
       if (
-        !onRequestOlderHistory ||
-        isLoadingMoreHistory ||
+        !onRequestOlderHistoryRef.current ||
+        isLoadingMoreHistoryRef.current ||
         loadRequestBlockedRef.current
       ) {
         return;
@@ -199,7 +213,7 @@ export default function MinuteChart({
       const loadThreshold = calculateHistoryLoadThreshold(range);
       if (barsInfo && barsInfo.barsBefore < loadThreshold) {
         loadRequestBlockedRef.current = true;
-        onRequestOlderHistory();
+        onRequestOlderHistoryRef.current();
       }
     };
 
@@ -211,6 +225,10 @@ export default function MinuteChart({
     markerPluginRef.current = markerPlugin;
 
     return () => {
+      if (pendingFitFrameRef.current !== null) {
+        cancelAnimationFrame(pendingFitFrameRef.current);
+        pendingFitFrameRef.current = null;
+      }
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(
         handleVisibleRangeChange,
       );
@@ -220,7 +238,7 @@ export default function MinuteChart({
       chartRef.current = null;
       chart.remove();
     };
-  }, [canLoadOlderHistory, isLoadingMoreHistory, onRequestOlderHistory]);
+  }, []);
 
   useEffect(() => {
     if (
@@ -242,8 +260,27 @@ export default function MinuteChart({
     const firstBarTime = bars[0]?.barTime ?? null;
     const prependedBarCount = countPrependedBars(bars, previousFirstBarTime);
 
-    if (!hasInitialViewRef.current) {
-      chartRef.current.timeScale().fitContent();
+    if (
+      bars.length > 0 &&
+      (!hasInitialViewRef.current ||
+        chartRef.current.timeScale().getVisibleLogicalRange() === null)
+    ) {
+      if (pendingFitFrameRef.current !== null) {
+        cancelAnimationFrame(pendingFitFrameRef.current);
+      }
+      pendingFitFrameRef.current = requestAnimationFrame(() => {
+        pendingFitFrameRef.current = null;
+        if (!chartRef.current) {
+          return;
+        }
+        chartRef.current.timeScale().fitContent();
+        if (chartRef.current.timeScale().getVisibleLogicalRange() === null) {
+          pendingFitFrameRef.current = requestAnimationFrame(() => {
+            pendingFitFrameRef.current = null;
+            chartRef.current?.timeScale().fitContent();
+          });
+        }
+      });
       hasInitialViewRef.current = true;
     } else if (
       prependedBarCount > 0 &&
