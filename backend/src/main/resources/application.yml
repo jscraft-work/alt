@@ -62,6 +62,9 @@ app:
     trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:}
   llm:
     base-url: ${LLM_HTTP_BASE_URL:http://host.docker.internal:18000}
+    retry:
+      max-attempts: ${LLM_RETRY_MAX_ATTEMPTS:2}
+      delay-millis: ${LLM_RETRY_DELAY_MILLIS:300}
     openclaw:
       timeout-seconds: ${LLM_OPENCLAW_TIMEOUT_SECONDS:60}
     nanobot:

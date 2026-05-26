@@ -97,6 +97,31 @@ public class LlmHttpAdapter implements TradingDecisionEngine {
                 .POST(HttpRequest.BodyPublishers.ofString(payload))
                 .build();
 
+        int maxAttempts = Math.max(1, properties.getRetry().getMaxAttempts());
+        long delayMillis = Math.max(0, properties.getRetry().getDelayMillis());
+        LlmCallResult lastResult = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            lastResult = executeOnce(httpRequest, level);
+            if (!shouldRetry(lastResult, attempt, maxAttempts)) {
+                return lastResult;
+            }
+            log.warn("llm.http.retry attempt={} of {} status={} exitCode={} reason={}",
+                    attempt + 1,
+                    maxAttempts,
+                    lastResult.callStatus(),
+                    lastResult.exitCode(),
+                    lastResult.failureMessage());
+            if (!sleepBeforeRetry(delayMillis)) {
+                return lastResult;
+            }
+        }
+
+        return lastResult != null
+                ? lastResult
+                : LlmCallResult.invalidOutput(-1, "", "", "llm call failed without result");
+    }
+
+    private LlmCallResult executeOnce(HttpRequest httpRequest, String level) {
         HttpResponse<String> response;
         try {
             response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
@@ -140,6 +165,35 @@ public class LlmHttpAdapter implements TradingDecisionEngine {
 
         log.debug("llm.http.ok status={} level={} chars={}", status, level, text.length());
         return LlmCallResult.success(status, text, "");
+    }
+
+    private boolean shouldRetry(LlmCallResult result, int attempt, int maxAttempts) {
+        if (attempt >= maxAttempts) {
+            return false;
+        }
+        return switch (result.callStatus()) {
+            case TIMEOUT -> true;
+            case INVALID_OUTPUT -> result.failureMessage() != null
+                    && result.failureMessage().startsWith("HTTP IO error:");
+            case NON_ZERO_EXIT -> {
+                Integer exitCode = result.exitCode();
+                yield exitCode != null && (exitCode == 429 || exitCode >= 500);
+            }
+            case AUTH_ERROR, EMPTY_OUTPUT, SUCCESS -> false;
+        };
+    }
+
+    private boolean sleepBeforeRetry(long delayMillis) {
+        if (delayMillis <= 0) {
+            return true;
+        }
+        try {
+            Thread.sleep(delayMillis);
+            return true;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     private static String stripTrailingSlash(String s) {

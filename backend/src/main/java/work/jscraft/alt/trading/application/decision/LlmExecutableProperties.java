@@ -14,6 +14,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class LlmExecutableProperties {
 
     private String baseUrl;
+    private final Retry retry = new Retry();
     private final Provider openclaw = new Provider();
     private final Provider nanobot = new Provider();
 
@@ -27,6 +28,10 @@ public class LlmExecutableProperties {
 
     public Provider getOpenclaw() {
         return openclaw;
+    }
+
+    public Retry getRetry() {
+        return retry;
     }
 
     public Provider getNanobot() {
@@ -59,6 +64,27 @@ public class LlmExecutableProperties {
 
         public void setTimeoutSeconds(int timeoutSeconds) {
             this.timeoutSeconds = timeoutSeconds;
+        }
+    }
+
+    public static class Retry {
+        private int maxAttempts = 2;
+        private long delayMillis = 300;
+
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(int maxAttempts) {
+            this.maxAttempts = maxAttempts;
+        }
+
+        public long getDelayMillis() {
+            return delayMillis;
+        }
+
+        public void setDelayMillis(long delayMillis) {
+            this.delayMillis = delayMillis;
         }
     }
 }

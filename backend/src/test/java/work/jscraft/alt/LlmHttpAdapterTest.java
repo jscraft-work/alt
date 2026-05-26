@@ -25,6 +25,7 @@ import work.jscraft.alt.trading.application.decision.LlmRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -47,6 +48,8 @@ class LlmHttpAdapterTest {
         properties.setBaseUrl(BASE_URL);
         properties.getOpenclaw().setTimeoutSeconds(30);
         properties.getNanobot().setTimeoutSeconds(60);
+        properties.getRetry().setMaxAttempts(2);
+        properties.getRetry().setDelayMillis(0);
         objectMapper = new ObjectMapper();
         adapter = new LlmHttpAdapter(properties, objectMapper, httpClient);
     }
@@ -86,6 +89,7 @@ class LlmHttpAdapterTest {
 
         assertThat(result.isSuccess()).isFalse();
         assertThat(result.callStatus()).isEqualTo(LlmCallResult.CallStatus.TIMEOUT);
+        verify(httpClient, times(2)).send(any(HttpRequest.class), any(BodyHandler.class));
     }
 
     @Test
@@ -105,6 +109,34 @@ class LlmHttpAdapterTest {
         LlmCallResult result = adapter.execute(request("openclaw"));
 
         assertThat(result.callStatus()).isEqualTo(LlmCallResult.CallStatus.AUTH_ERROR);
+        verify(httpClient, times(1)).send(any(HttpRequest.class), any(BodyHandler.class));
+    }
+
+    @Test
+    void serverError_retriesOnceAndCanRecover() throws Exception {
+        stubResponseSequence(
+                response(502, "bad gateway"),
+                response(200, "{\"text\":\"recovered\"}"));
+
+        LlmCallResult result = adapter.execute(request("openclaw"));
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.stdoutText()).isEqualTo("recovered");
+        verify(httpClient, times(2)).send(any(HttpRequest.class), any(BodyHandler.class));
+    }
+
+    @Test
+    void timeout_retriesOnceAndCanRecover() throws Exception {
+        HttpResponse<String> success = response(200, "{\"text\":\"retry ok\"}");
+        doThrow(HttpTimeoutException.class)
+                .doReturn(success)
+                .when(httpClient).send(any(HttpRequest.class), any(BodyHandler.class));
+
+        LlmCallResult result = adapter.execute(request("openclaw"));
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.stdoutText()).isEqualTo("retry ok");
+        verify(httpClient, times(2)).send(any(HttpRequest.class), any(BodyHandler.class));
     }
 
     @Test
@@ -141,12 +173,22 @@ class LlmHttpAdapterTest {
     }
 
     private void stubResponse(int status, String body) throws Exception {
-        @SuppressWarnings("unchecked")
+        HttpResponse<String> response = response(status, body);
+        doReturn(response)
+                .when(httpClient).send(any(HttpRequest.class), any(BodyHandler.class));
+    }
+
+    private void stubResponseSequence(HttpResponse<String> first, HttpResponse<String> second) throws Exception {
+        doReturn(first, second)
+                .when(httpClient).send(any(HttpRequest.class), any(BodyHandler.class));
+    }
+
+    @SuppressWarnings("unchecked")
+    private HttpResponse<String> response(int status, String body) {
         HttpResponse<String> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(status);
         when(response.body()).thenReturn(body);
-        doReturn(response)
-                .when(httpClient).send(any(HttpRequest.class), any(BodyHandler.class));
+        return response;
     }
 
     private String extractBody(HttpRequest request) throws Exception {
