@@ -124,9 +124,6 @@ public class PromptContextAssembler {
         ctx.put("held_positions", formatHeldPositions(heldPositions));
 
         List<String> targetSymbols = resolveTargetSymbols(snapshot, spec, heldPositions);
-        if (targetSymbols.isEmpty()) {
-            blockingReasons.add("평가 대상 종목 없음");
-        }
         ctx.put("stocks", buildStocks(snapshot, targetSymbols, spec, capturedAt, blockingReasons));
 
         if (spec.macro()) {
