@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.stereotype.Service;
 
@@ -71,6 +72,7 @@ public class PromptContextAssembler {
     private final StrategyInstanceRepository strategyInstanceRepository;
     private final TradeOrderIntentRepository tradeOrderIntentRepository;
     private final TradeDecisionLogRepository tradeDecisionLogRepository;
+    private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public PromptContextAssembler(
@@ -87,6 +89,7 @@ public class PromptContextAssembler {
             StrategyInstanceRepository strategyInstanceRepository,
             TradeOrderIntentRepository tradeOrderIntentRepository,
             TradeDecisionLogRepository tradeDecisionLogRepository,
+            ObjectMapper objectMapper,
             Clock clock) {
         this.portfolioRepository = portfolioRepository;
         this.portfolioPositionRepository = portfolioPositionRepository;
@@ -101,11 +104,13 @@ public class PromptContextAssembler {
         this.strategyInstanceRepository = strategyInstanceRepository;
         this.tradeOrderIntentRepository = tradeOrderIntentRepository;
         this.tradeDecisionLogRepository = tradeDecisionLogRepository;
+        this.objectMapper = objectMapper;
         this.clock = clock;
     }
 
-    public Map<String, Object> assemble(SettingsSnapshot snapshot, PromptInputSpec spec) {
+    public PromptContext assemble(SettingsSnapshot snapshot, PromptInputSpec spec) {
         Map<String, Object> ctx = new LinkedHashMap<>();
+        List<String> blockingReasons = new ArrayList<>();
 
         OffsetDateTime capturedAt = snapshot.capturedAt() != null
                 ? snapshot.capturedAt()
@@ -119,13 +124,16 @@ public class PromptContextAssembler {
         ctx.put("held_positions", formatHeldPositions(heldPositions));
 
         List<String> targetSymbols = resolveTargetSymbols(snapshot, spec, heldPositions);
-        ctx.put("stocks", buildStocks(snapshot, targetSymbols, spec, capturedAt));
+        if (targetSymbols.isEmpty()) {
+            blockingReasons.add("평가 대상 종목 없음");
+        }
+        ctx.put("stocks", buildStocks(snapshot, targetSymbols, spec, capturedAt, blockingReasons));
 
         if (spec.macro()) {
             ctx.put("macro", buildMacro(capturedAt));
         }
 
-        return ctx;
+        return new PromptContext(ctx, List.copyOf(blockingReasons));
     }
 
     private List<String> resolveTargetSymbols(
@@ -179,7 +187,8 @@ public class PromptContextAssembler {
             SettingsSnapshot snapshot,
             List<String> targetSymbols,
             PromptInputSpec spec,
-            OffsetDateTime capturedAt) {
+            OffsetDateTime capturedAt,
+            List<String> blockingReasons) {
         List<Map<String, Object>> stocks = new ArrayList<>();
         for (String symbolCode : targetSymbols) {
             Optional<AssetMasterEntity> assetOpt = assetMasterRepository.findBySymbolCode(symbolCode);
@@ -207,12 +216,61 @@ public class PromptContextAssembler {
                     ? buildTradeHistory(snapshot.strategyInstanceId(), symbolCode,
                             capturedAt, spec.tradeHistoryDays())
                     : "";
+            String positionMemory = buildPositionMemory(snapshot.strategyInstanceId(), symbolCode, capturedAt);
+
+            if (spec.minuteBars() != null && minuteBars.isBlank()) {
+                blockingReasons.add(symbolCode + " minute_bars 부족");
+            }
+            if (spec.dailyBars() != null && dailyBars.isBlank()) {
+                blockingReasons.add(symbolCode + " daily_bars 부족");
+            }
 
             stocks.add(StockContext.of(symbolCode, name,
                     minuteBars, dailyBars, fundamental,
-                    news, disclosures, orderbook, tradeHistory));
+                    news, disclosures, orderbook, tradeHistory, positionMemory));
         }
         return stocks;
+    }
+
+    private String buildPositionMemory(UUID strategyInstanceId, String symbolCode, OffsetDateTime capturedAt) {
+        OffsetDateTime since = capturedAt.minusDays(90);
+        List<TradeDecisionLogEntity> decisions = tradeDecisionLogRepository.findRecentByStrategy(strategyInstanceId, since);
+        for (TradeDecisionLogEntity decision : decisions) {
+            String responseText = decision.getResponseText();
+            if (responseText == null || responseText.isBlank()) {
+                continue;
+            }
+            try {
+                JsonNode root = objectMapper.readTree(responseText);
+                JsonNode positionMemory = root.path("positionMemory");
+                if (positionMemory.isMissingNode()) {
+                    continue;
+                }
+                if (positionMemory.isNull()) {
+                    return "null";
+                }
+                if (!referencesSymbol(root, symbolCode)) {
+                    continue;
+                }
+                return objectMapper.writeValueAsString(positionMemory);
+            } catch (Exception ignored) {
+                // 과거 비정형 응답이나 임시 운영 로그는 무시하고 다음 판단으로 진행한다.
+            }
+        }
+        return "null";
+    }
+
+    private boolean referencesSymbol(JsonNode root, String symbolCode) {
+        JsonNode orders = root.path("orders");
+        if (orders.isArray() && !orders.isEmpty()) {
+            for (JsonNode order : orders) {
+                if (symbolCode.equals(order.path("symbolCode").asText())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
     }
 
     private String buildMinuteBars(String symbolCode, OffsetDateTime capturedAt, int lookbackMinutes) {
@@ -424,5 +482,10 @@ public class PromptContextAssembler {
 
     private static String emptyIfNull(String s) {
         return s == null ? "" : s;
+    }
+
+    public record PromptContext(
+            Map<String, Object> context,
+            List<String> blockingReasons) {
     }
 }

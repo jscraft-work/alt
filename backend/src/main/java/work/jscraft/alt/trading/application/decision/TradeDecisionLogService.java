@@ -63,6 +63,19 @@ public class TradeDecisionLogService {
     }
 
     @Transactional
+    public TradeDecisionLogEntity saveSystemHold(
+            UUID cycleLogId,
+            SettingsSnapshot snapshot,
+            JsonNode settingsSnapshotJson,
+            String summary) {
+        TradeCycleLogEntity cycleLog = requireCycleLog(cycleLogId);
+        TradeDecisionLogEntity log = baseLog(cycleLog, snapshot, settingsSnapshotJson, null, null, null);
+        log.setCycleStatus(STATUS_HOLD);
+        log.setSummary(summary);
+        return tradeDecisionLogRepository.saveAndFlush(log);
+    }
+
+    @Transactional
     public TradeDecisionLogEntity saveFailure(
             UUID cycleLogId,
             SettingsSnapshot snapshot,
@@ -95,16 +108,20 @@ public class TradeDecisionLogService {
         log.setCycleFinishedAt(now);
         log.setBusinessDate(cycleLog.getCycleStartedAt().atZoneSameInstant(KST).toLocalDate());
         log.setSettingsSnapshotJson(settingsSnapshotJson);
-        log.setSessionId(request.sessionId());
-        log.setEngineName(request.engineName());
-        log.setModelName(request.modelName());
-        log.setRequestText(request.promptText());
-        log.setResponseText(result.stdoutText());
-        log.setStdoutText(result.stdoutText());
-        log.setStderrText(result.stderrText());
-        log.setTimeoutSeconds((int) request.timeout().toSeconds());
-        log.setExitCode(result.exitCode());
-        log.setCallStatus(result.callStatus().name());
+        if (request != null) {
+            log.setSessionId(request.sessionId());
+            log.setEngineName(request.engineName());
+            log.setModelName(request.modelName());
+            log.setRequestText(request.promptText());
+            log.setTimeoutSeconds((int) request.timeout().toSeconds());
+        }
+        if (result != null) {
+            log.setResponseText(result.stdoutText());
+            log.setStdoutText(result.stdoutText());
+            log.setStderrText(result.stderrText());
+            log.setExitCode(result.exitCode());
+            log.setCallStatus(result.callStatus().name());
+        }
         if (usage != null) {
             log.setInputTokens(usage.inputTokens());
             log.setOutputTokens(usage.outputTokens());

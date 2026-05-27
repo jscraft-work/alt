@@ -51,7 +51,8 @@ class PromptVocabularyTest {
                 "news",
                 "disclosures",
                 "orderbook",
-                "trade_history");
+                "trade_history",
+                "position_memory");
     }
 
     @Test

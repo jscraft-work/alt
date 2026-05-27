@@ -2,6 +2,9 @@ package work.jscraft.alt;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -9,6 +12,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import work.jscraft.alt.marketdata.infrastructure.persistence.AssetMasterEntity;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketDailyItemEntity;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketDailyItemRepository;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketMinuteItemEntity;
+import work.jscraft.alt.marketdata.infrastructure.persistence.MarketMinuteItemRepository;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioEntity;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioPositionRepository;
 import work.jscraft.alt.portfolio.infrastructure.persistence.PortfolioRepository;
@@ -54,6 +61,12 @@ class PaperTradingCycleE2ETest extends TradingCycleIntegrationTestSupport {
 
     @Autowired
     private StrategyInstanceWatchlistRelationRepository watchlistRelationRepository;
+
+    @Autowired
+    private MarketMinuteItemRepository marketMinuteItemRepository;
+
+    @Autowired
+    private MarketDailyItemRepository marketDailyItemRepository;
 
     @BeforeEach
     void setUp() {
@@ -133,6 +146,107 @@ class PaperTradingCycleE2ETest extends TradingCycleIntegrationTestSupport {
         assertThat(decisionLog.getCycleStatus()).isEqualTo("HOLD");
     }
 
+    @Test
+    void injectsPreviousPositionMemoryIntoNextPrompt() {
+        StrategyInstanceEntity instance = createActiveInstance("KR 박스 A", "paper");
+        AssetMasterEntity kakao = createAsset("035720", "카카오", null);
+        addWatchlist(instance, kakao);
+        seedPortfolio(instance, new BigDecimal("1000000.0000"));
+        seedBarData("035720", OffsetDateTime.parse("2026-05-11T10:00:00+09:00"));
+
+        String prompt = """
+                ---
+                minute_bars: 60
+                daily_bars: 30
+                scope: full_watchlist
+                ---
+                <system>Test prompt.</system>
+                {% for s in stocks %}
+                <stock code="{{ s.code }}">
+                  <position_memory>{{ s.position_memory }}</position_memory>
+                </stock>
+                {% endfor %}
+                """;
+        var promptVersion = addPromptVersion(instance, 2, prompt, "position memory");
+        instance.setCurrentPromptVersion(promptVersion);
+        strategyInstanceRepository.saveAndFlush(instance);
+
+        fakeTradingDecisionEngine.primeSuccess("""
+                {
+                  "cycleStatus":"EXECUTE",
+                  "summary":"카카오 매수",
+                  "positionMemory":{
+                    "buyReason":"박스 하단 반등 기대",
+                    "expectedReactionDeadline":"2026-05-12T11:00:00+09:00",
+                    "brokenIf":["박스 하단 이탈 후 회복 실패"],
+                    "entryBoxLow":"41800",
+                    "entryBoxHigh":"45200"
+                  },
+                  "orders":[
+                    {"sequenceNo":1,"symbolCode":"035720","side":"BUY","quantity":20,"orderType":"LIMIT","price":42450,"rationale":"하단 반등 기대"}
+                  ]
+                }
+                """);
+        orchestrator.runOnce(instance.getId(), "test-worker");
+
+        fakeTradingDecisionEngine.primeSuccess("""
+                {
+                  "cycleStatus":"HOLD",
+                  "summary":"반등 대기",
+                  "positionMemory":{
+                    "buyReason":"박스 하단 반등 기대",
+                    "expectedReactionDeadline":"2026-05-12T11:00:00+09:00",
+                    "brokenIf":["박스 하단 이탈 후 회복 실패"],
+                    "entryBoxLow":"41800",
+                    "entryBoxHigh":"45200"
+                  },
+                  "orders":[]
+                }
+                """);
+        orchestrator.runOnce(instance.getId(), "test-worker");
+
+        assertThat(fakeTradingDecisionEngine.lastRequest()).isNotNull();
+        assertThat(fakeTradingDecisionEngine.lastRequest().promptText())
+                .contains("<position_memory>{\"buyReason\":\"박스 하단 반등 기대\"")
+                .contains("\"expectedReactionDeadline\":\"2026-05-12T11:00:00+09:00\"");
+    }
+
+    @Test
+    void logsSystemHoldWithoutCallingLlmWhenRequiredBarsAreMissing() {
+        StrategyInstanceEntity instance = createActiveInstance("KR 박스 B", "paper");
+        AssetMasterEntity kia = createAsset("000270", "기아", null);
+        addWatchlist(instance, kia);
+        seedPortfolio(instance, new BigDecimal("1000000.0000"));
+
+        String prompt = """
+                ---
+                minute_bars: 60
+                daily_bars: 30
+                scope: full_watchlist
+                ---
+                <system>Test prompt.</system>
+                {% for s in stocks %}
+                <stock code="{{ s.code }}">{{ s.minute_bars }} {{ s.daily_bars }}</stock>
+                {% endfor %}
+                """;
+        var promptVersion = addPromptVersion(instance, 2, prompt, "require bars");
+        instance.setCurrentPromptVersion(promptVersion);
+        strategyInstanceRepository.saveAndFlush(instance);
+
+        CycleResult result = orchestrator.runOnce(instance.getId(), "test-worker");
+
+        assertThat(result.status()).isEqualTo(CycleResult.Status.COMPLETED);
+        assertThat(result.cycleStatus()).isEqualTo("HOLD");
+        assertThat(fakeTradingDecisionEngine.lastRequest()).isNull();
+
+        TradeDecisionLogEntity decisionLog = tradeDecisionLogRepository.findAll().get(0);
+        assertThat(decisionLog.getCycleStatus()).isEqualTo("HOLD");
+        assertThat(decisionLog.getSummary()).contains("LLM 판단 안함 - 데이터 부족");
+        assertThat(decisionLog.getSummary()).contains("minute_bars 부족");
+        assertThat(decisionLog.getSummary()).contains("daily_bars 부족");
+        assertThat(decisionLog.getCallStatus()).isNull();
+    }
+
     private void addWatchlist(StrategyInstanceEntity instance, AssetMasterEntity asset) {
         StrategyInstanceWatchlistRelationEntity relation = new StrategyInstanceWatchlistRelationEntity();
         relation.setStrategyInstance(instance);
@@ -147,5 +261,30 @@ class PaperTradingCycleE2ETest extends TradingCycleIntegrationTestSupport {
         portfolio.setTotalAssetAmount(cash);
         portfolio.setRealizedPnlToday(BigDecimal.ZERO);
         portfolioRepository.saveAndFlush(portfolio);
+    }
+
+    private void seedBarData(String symbolCode, OffsetDateTime barTime) {
+        MarketMinuteItemEntity minute = new MarketMinuteItemEntity();
+        minute.setSymbolCode(symbolCode);
+        minute.setBarTime(barTime);
+        minute.setBusinessDate(barTime.atZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDate());
+        minute.setOpenPrice(new BigDecimal("42000.00000000"));
+        minute.setHighPrice(new BigDecimal("42500.00000000"));
+        minute.setLowPrice(new BigDecimal("41900.00000000"));
+        minute.setClosePrice(new BigDecimal("42450.00000000"));
+        minute.setVolume(new BigDecimal("1000.0000"));
+        minute.setSourceName("test");
+        marketMinuteItemRepository.saveAndFlush(minute);
+
+        MarketDailyItemEntity daily = new MarketDailyItemEntity();
+        daily.setSymbolCode(symbolCode);
+        daily.setBusinessDate(LocalDate.of(2026, 5, 9));
+        daily.setOpenPrice(new BigDecimal("43000.00000000"));
+        daily.setHighPrice(new BigDecimal("45000.00000000"));
+        daily.setLowPrice(new BigDecimal("41800.00000000"));
+        daily.setClosePrice(new BigDecimal("42450.00000000"));
+        daily.setVolume(new BigDecimal("100000.0000"));
+        daily.setSourceName("test");
+        marketDailyItemRepository.saveAndFlush(daily);
     }
 }

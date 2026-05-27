@@ -26,7 +26,30 @@ class DecisionParserValidationTest {
         assertThat(decision.cycleStatus()).isEqualTo("HOLD");
         assertThat(decision.summary()).isEqualTo("관망");
         assertThat(decision.confidence()).isEqualByComparingTo("0.42");
+        assertThat(decision.positionMemory()).isNull();
         assertThat(decision.orders()).isEmpty();
+    }
+
+    @Test
+    void parsesPositionMemoryWhenPresent() {
+        String json = """
+                {
+                  "cycleStatus":"HOLD",
+                  "summary":"반등 대기",
+                  "positionMemory":{
+                    "buyReason":"박스 하단 반등 기대",
+                    "expectedReactionDeadline":"2026-05-28T11:00:00+09:00",
+                    "brokenIf":["박스 하단 이탈 후 회복 실패"],
+                    "entryBoxLow":"41800",
+                    "entryBoxHigh":"45200"
+                  }
+                }
+                """;
+
+        ParsedDecision decision = parser.parse(json);
+
+        assertThat(decision.positionMemory()).isNotNull();
+        assertThat(decision.positionMemory().path("buyReason").asText()).isEqualTo("박스 하단 반등 기대");
     }
 
     @Test

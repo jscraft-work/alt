@@ -164,9 +164,19 @@ public class CycleExecutionOrchestrator {
             SettingsSnapshot snapshot,
             boolean liveMode) {
         String renderedPrompt;
+        JsonNode settingsSnapshotJson = serializeSnapshot(snapshot);
         try {
             PromptInputSpec inputSpec = promptInputSpecParser.parse(snapshot.promptText());
-            Map<String, Object> ctx = promptContextAssembler.assemble(snapshot, inputSpec);
+            PromptContextAssembler.PromptContext promptContext = promptContextAssembler.assemble(snapshot, inputSpec);
+            if (!promptContext.blockingReasons().isEmpty()) {
+                String summary = "LLM 판단 안함 - 데이터 부족: " + String.join(", ", promptContext.blockingReasons());
+                TradeDecisionLogEntity decisionLog =
+                        decisionLogService.saveSystemHold(cycleLogId, snapshot, settingsSnapshotJson, summary);
+                lifecycle.complete(cycleLogId);
+                return CycleResult.completed(cycleLogId, decisionLog.getId(), TradeDecisionLogService.STATUS_HOLD,
+                        List.of());
+            }
+            Map<String, Object> ctx = promptContext.context();
             renderedPrompt = promptTemplateEngine.render(inputSpec.body(), ctx);
         } catch (PromptInputSpecException ex) {
             log.warn("prompt parse/render failed instance={} message={}",
@@ -178,7 +188,6 @@ public class CycleExecutionOrchestrator {
         lifecycle.advance(cycleLogId, TradeCycleLifecycle.STAGE_LLM_CALLING);
         LlmRequest llmRequest = buildLlmRequest(instance, snapshot, renderedPrompt);
         LlmCallResult llmResult = decisionEngine.requestTradingDecision(llmRequest);
-        JsonNode settingsSnapshotJson = serializeSnapshot(snapshot);
 
         if (!llmResult.isSuccess()) {
             decisionLogService.saveFailure(

@@ -254,8 +254,34 @@ public class PublicTradeQueryService {
 
     private JsonNode buildParsedDecision(TradeDecisionLogEntity decision, List<TradeOrderIntentEntity> intents) {
         var parsed = objectMapper.createObjectNode();
+        if (decision.getResponseText() != null && !decision.getResponseText().isBlank()) {
+            try {
+                JsonNode root = objectMapper.readTree(decision.getResponseText());
+                if (root.isObject()) {
+                    parsed = ((com.fasterxml.jackson.databind.node.ObjectNode) root).deepCopy();
+                }
+            } catch (Exception ignored) {
+                // 저장된 raw response가 비정형이면 DB 필드 기반 fallback을 사용한다.
+            }
+        }
         parsed.put("cycleStatus", decision.getCycleStatus());
         parsed.put("summary", Optional.ofNullable(decision.getSummary()).orElse(""));
+        if (decision.getConfidence() != null) {
+            parsed.put("confidence", decision.getConfidence());
+        }
+        if (decision.getBoxLow() != null || decision.getBoxHigh() != null || decision.getBoxConfidence() != null) {
+            var boxEstimate = objectMapper.createObjectNode();
+            if (decision.getBoxLow() != null) {
+                boxEstimate.put("low", decision.getBoxLow());
+            }
+            if (decision.getBoxHigh() != null) {
+                boxEstimate.put("high", decision.getBoxHigh());
+            }
+            if (decision.getBoxConfidence() != null) {
+                boxEstimate.put("confidence", decision.getBoxConfidence());
+            }
+            parsed.set("boxEstimate", boxEstimate);
+        }
         var ordersArray = objectMapper.createArrayNode();
         for (TradeOrderIntentEntity intent : intents) {
             var order = objectMapper.createObjectNode();

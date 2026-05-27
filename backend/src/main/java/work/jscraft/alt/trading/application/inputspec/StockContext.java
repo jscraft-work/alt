@@ -16,7 +16,8 @@ public final class StockContext {
             String code, String name,
             String minuteBars, String dailyBars, String fundamental,
             String news, String disclosures, String orderbook,
-            String tradeHistory) {
+            String tradeHistory,
+            String positionMemory) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("code", code);
         m.put("name", name == null ? "" : name);
@@ -27,6 +28,7 @@ public final class StockContext {
         m.put("disclosures", disclosures == null ? "" : disclosures);
         m.put("orderbook", orderbook == null ? "" : orderbook);
         m.put("trade_history", tradeHistory == null ? "" : tradeHistory);
+        m.put("position_memory", positionMemory == null ? "null" : positionMemory);
         return m;
     }
 }

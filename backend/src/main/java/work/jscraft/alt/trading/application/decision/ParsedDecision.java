@@ -10,7 +10,17 @@ public record ParsedDecision(
         String summary,
         BigDecimal confidence,
         BoxEstimate boxEstimate,
+        JsonNode positionMemory,
         List<ParsedOrder> orders) {
+
+    public ParsedDecision(
+            String cycleStatus,
+            String summary,
+            BigDecimal confidence,
+            BoxEstimate boxEstimate,
+            List<ParsedOrder> orders) {
+        this(cycleStatus, summary, confidence, boxEstimate, null, orders);
+    }
 
     public record ParsedOrder(
             int sequenceNo,

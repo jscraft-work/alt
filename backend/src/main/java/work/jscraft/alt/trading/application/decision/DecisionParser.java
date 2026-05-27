@@ -1,6 +1,7 @@
 package work.jscraft.alt.trading.application.decision;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -67,6 +68,7 @@ public class DecisionParser {
                 ? new BigDecimal(root.get("confidence").asText())
                 : null;
         BoxEstimate boxEstimate = parseBoxEstimate(root);
+        JsonNode positionMemory = parsePositionMemory(root);
 
         List<ParsedOrder> orders = parseOrders(root);
 
@@ -81,7 +83,7 @@ public class DecisionParser {
                     "EXECUTE인데 orders가 비어 있습니다.");
         }
 
-        return new ParsedDecision(cycleStatus, summary, confidence, boxEstimate, orders);
+        return new ParsedDecision(cycleStatus, summary, confidence, boxEstimate, positionMemory, orders);
     }
 
     private BoxEstimate parseBoxEstimate(JsonNode root) {
@@ -156,6 +158,57 @@ public class DecisionParser {
             parsed.add(new ParsedOrder(sequenceNo, symbolCode, side, quantity, orderType, price, rationale, evidence));
         }
         return parsed;
+    }
+
+    private JsonNode parsePositionMemory(JsonNode root) {
+        JsonNode node = root.path("positionMemory");
+        if (node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        if (!node.isObject()) {
+            throw new DecisionParseException(
+                    DecisionParseException.Reason.INVALID_JSON,
+                    "positionMemory는 객체여야 합니다.");
+        }
+        requireText(node, "buyReason");
+        String expectedReactionDeadline = requireText(node, "expectedReactionDeadline");
+        try {
+            OffsetDateTime.parse(expectedReactionDeadline);
+        } catch (RuntimeException ex) {
+            throw new DecisionParseException(
+                    DecisionParseException.Reason.INVALID_JSON,
+                    "positionMemory.expectedReactionDeadline ISO timestamp 형식 오류");
+        }
+        JsonNode brokenIf = node.get("brokenIf");
+        if (brokenIf == null || !brokenIf.isArray()) {
+            throw new DecisionParseException(
+                    DecisionParseException.Reason.INVALID_JSON,
+                    "positionMemory.brokenIf는 문자열 배열이어야 합니다.");
+        }
+        for (JsonNode item : brokenIf) {
+            if (!item.isTextual() || item.asText().isBlank()) {
+                throw new DecisionParseException(
+                        DecisionParseException.Reason.INVALID_JSON,
+                        "positionMemory.brokenIf는 비어있지 않은 문자열 배열이어야 합니다.");
+            }
+        }
+        readOptionalDecimalField(node, "entryBoxLow", "positionMemory");
+        readOptionalDecimalField(node, "entryBoxHigh", "positionMemory");
+        return node.deepCopy();
+    }
+
+    private BigDecimal readOptionalDecimalField(JsonNode node, String field, String prefix) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value.asText());
+        } catch (NumberFormatException ex) {
+            throw new DecisionParseException(
+                    DecisionParseException.Reason.INVALID_JSON,
+                    prefix + "." + field + " 숫자 형식 오류");
+        }
     }
 
     private String requireText(JsonNode node, String field) {

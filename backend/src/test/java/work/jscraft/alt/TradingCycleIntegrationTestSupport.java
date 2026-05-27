@@ -16,8 +16,6 @@ abstract class TradingCycleIntegrationTestSupport extends CollectorIntegrationTe
      */
     protected static final String DEFAULT_CYCLE_PROMPT = """
             ---
-            minute_bars: 60
-            fundamental: true
             scope: full_watchlist
             ---
             <system>Test prompt.</system>

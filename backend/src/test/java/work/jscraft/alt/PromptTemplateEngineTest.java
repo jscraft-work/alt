@@ -45,9 +45,9 @@ class PromptTemplateEngineTest {
         Map<String, Object> ctx = Map.of(
                 "stocks", List.of(
                         StockContext.of("005930", "삼성전자",
-                                "[14:25] 75100 vol=1200", "", "PER=11.2", "", "", "", ""),
+                                "[14:25] 75100 vol=1200", "", "PER=11.2", "", "", "", "", "null"),
                         StockContext.of("035720", "카카오",
-                                "[14:25] 42100 vol=830", "", "PER=N/A", "", "", "", "")));
+                                "[14:25] 42100 vol=830", "", "PER=N/A", "", "", "", "", "null")));
 
         String out = engine.render(body, ctx);
 
@@ -55,6 +55,23 @@ class PromptTemplateEngineTest {
         assertThat(out).contains("<minute_bars>[14:25] 75100 vol=1200</minute_bars>");
         assertThat(out).contains("<fundamental>PER=11.2</fundamental>");
         assertThat(out).contains("<stock code=\"035720\" name=\"카카오\">");
+    }
+
+    @Test
+    void rendersPositionMemoryField() {
+        String body = """
+                {% for s in stocks -%}
+                <position_memory>{{ s.position_memory }}</position_memory>
+                {% endfor %}""";
+        Map<String, Object> ctx = Map.of(
+                "stocks", List.of(
+                        StockContext.of("035720", "카카오",
+                                "", "", "", "", "", "", "",
+                                "{\"buyReason\":\"박스 하단 반등 기대\"}")));
+
+        String out = engine.render(body, ctx);
+
+        assertThat(out).contains("{\"buyReason\":\"박스 하단 반등 기대\"}");
     }
 
     @Test

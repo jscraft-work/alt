@@ -47,7 +47,8 @@ public class PromptVocabularyProvider {
                         new StockField("news", "종목별 최근 useful 뉴스", "news_hours"),
                         new StockField("disclosures", "종목별 최근 공시", "disclosure_hours"),
                         new StockField("orderbook", "호가 1~5단계 (KIS WS 활성 필요)", "orderbook"),
-                        new StockField("trade_history", "이 인스턴스의 종목별 최근 매매이력", "trade_history_days")));
+                        new StockField("trade_history", "이 인스턴스의 종목별 최근 매매이력", "trade_history_days"),
+                        new StockField("position_memory", "최근 판단에서 저장된 보유 이유 메모 JSON 문자열", null)));
 
         List<GlobalVariable> globalVariables = List.of(
                 new GlobalVariable("macro", "매크로 지수 요약", "macro"));
