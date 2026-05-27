@@ -144,7 +144,7 @@ public class DecisionParser {
                 throw new DecisionParseException(
                         DecisionParseException.Reason.INVALID_ORDER, "허용되지 않는 side: " + side);
             }
-            String orderType = requireText(node, "orderType");
+            String orderType = readOrderType(node);
             if (!ALLOWED_ORDER_TYPES.contains(orderType)) {
                 throw new DecisionParseException(
                         DecisionParseException.Reason.INVALID_ORDER, "허용되지 않는 orderType: " + orderType);
@@ -232,6 +232,14 @@ public class DecisionParser {
             throw new DecisionParseException(
                     DecisionParseException.Reason.INVALID_ORDER, field + " 숫자 형식 오류");
         }
+    }
+
+    private String readOrderType(JsonNode node) {
+        JsonNode value = node.get("orderType");
+        if (value == null || value.isNull() || value.asText().isBlank()) {
+            return node.hasNonNull("price") ? "LIMIT" : "MARKET";
+        }
+        return value.asText();
     }
 
     private BigDecimal readDecimal(JsonNode node, String field) {

@@ -77,6 +77,44 @@ class DecisionParserValidationTest {
     }
 
     @Test
+    void infersLimitOrderTypeWhenPriceExists() {
+        String json = """
+                {
+                  "cycleStatus":"EXECUTE",
+                  "summary":"카카오 매수",
+                  "orders":[
+                    {"sequenceNo":1,"symbolCode":"035720","side":"BUY","quantity":20,"price":42450,"rationale":"하단 반등 기대"}
+                  ]
+                }
+                """;
+
+        ParsedDecision decision = parser.parse(json);
+
+        assertThat(decision.orders()).hasSize(1);
+        assertThat(decision.orders().get(0).orderType()).isEqualTo("LIMIT");
+        assertThat(decision.orders().get(0).price()).isEqualByComparingTo("42450");
+    }
+
+    @Test
+    void infersMarketOrderTypeWhenPriceMissing() {
+        String json = """
+                {
+                  "cycleStatus":"EXECUTE",
+                  "summary":"기아 전량 매도",
+                  "orders":[
+                    {"sequenceNo":1,"symbolCode":"000270","side":"SELL","quantity":5,"rationale":"박스 하단 이탈 후 회복 실패"}
+                  ]
+                }
+                """;
+
+        ParsedDecision decision = parser.parse(json);
+
+        assertThat(decision.orders()).hasSize(1);
+        assertThat(decision.orders().get(0).orderType()).isEqualTo("MARKET");
+        assertThat(decision.orders().get(0).price()).isNull();
+    }
+
+    @Test
     void toleratesRawNewlineInsideStringValue() {
         String json = """
                 {
