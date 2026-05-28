@@ -179,7 +179,7 @@ public class StrategyTemplateService {
     public record CreateStrategyTemplateRequest(
             @NotBlank(message = "name은 필수입니다.") @Size(max = 120, message = "name은 120자 이하여야 합니다.") String name,
             @NotBlank(message = "description은 필수입니다.") String description,
-            @Min(value = 1, message = "defaultCycleMinutes는 1 이상이어야 합니다.") @Max(value = 30, message = "defaultCycleMinutes는 30 이하여야 합니다.") int defaultCycleMinutes,
+            @Min(value = 1, message = "defaultCycleMinutes는 1 이상이어야 합니다.") @Max(value = 10080, message = "defaultCycleMinutes는 10080 이하여야 합니다.") int defaultCycleMinutes,
             @NotBlank(message = "defaultPromptText는 필수입니다.") String defaultPromptText,
             @NotNull(message = "defaultExecutionConfig는 필수입니다.") JsonNode defaultExecutionConfig,
             @NotNull(message = "defaultTradingModelProfileId는 필수입니다.") UUID defaultTradingModelProfileId)
@@ -189,7 +189,7 @@ public class StrategyTemplateService {
     public record UpdateStrategyTemplateRequest(
             @NotBlank(message = "name은 필수입니다.") @Size(max = 120, message = "name은 120자 이하여야 합니다.") String name,
             @NotBlank(message = "description은 필수입니다.") String description,
-            @Min(value = 1, message = "defaultCycleMinutes는 1 이상이어야 합니다.") @Max(value = 30, message = "defaultCycleMinutes는 30 이하여야 합니다.") int defaultCycleMinutes,
+            @Min(value = 1, message = "defaultCycleMinutes는 1 이상이어야 합니다.") @Max(value = 10080, message = "defaultCycleMinutes는 10080 이하여야 합니다.") int defaultCycleMinutes,
             @NotBlank(message = "defaultPromptText는 필수입니다.") String defaultPromptText,
             @NotNull(message = "defaultExecutionConfig은 필수입니다.") JsonNode defaultExecutionConfig,
             @NotNull(message = "defaultTradingModelProfileId는 필수입니다.") UUID defaultTradingModelProfileId,

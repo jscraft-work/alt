@@ -682,8 +682,8 @@ public class StrategyInstanceService {
                     message = "budgetAmount는 0보다 커야 합니다.") BigDecimal budgetAmount,
             UUID tradingModelProfileId,
             @Min(value = 1, message = "cycleMinutes는 1 이상이어야 합니다.") @Max(
-                    value = 30,
-                    message = "cycleMinutes는 30 이하여야 합니다.") Integer cycleMinutes,
+                    value = 10080,
+                    message = "cycleMinutes는 10080 이하여야 합니다.") Integer cycleMinutes,
             JsonNode executionConfigOverride) {
     }
 
@@ -780,7 +780,7 @@ public class StrategyInstanceService {
         }
 
         @Min(value = 1, message = "cycleMinutes는 1 이상이어야 합니다.")
-        @Max(value = 30, message = "cycleMinutes는 30 이하여야 합니다.")
+        @Max(value = 10080, message = "cycleMinutes는 10080 이하여야 합니다.")
         public Integer cycleMinutes() {
             return cycleMinutes;
         }
