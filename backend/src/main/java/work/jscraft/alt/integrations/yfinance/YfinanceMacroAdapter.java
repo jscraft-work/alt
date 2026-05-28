@@ -1,6 +1,7 @@
 package work.jscraft.alt.integrations.yfinance;
 
 import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -205,7 +206,7 @@ public class YfinanceMacroAdapter implements MacroGateway {
     }
 
     private TickerResult fetchTicker(TickerMapping mapping) {
-        String url = UriComponentsBuilder
+        URI uri = UriComponentsBuilder
                 .fromUriString(properties.getBaseUrl())
                 .path("/v7/finance/chart/")
                 .pathSegment(mapping.ticker())
@@ -213,12 +214,12 @@ public class YfinanceMacroAdapter implements MacroGateway {
                 .queryParam("interval", "1d")
                 .build()
                 .encode()
-                .toUriString();
+                .toUri();
 
         ResponseEntity<String> response;
         try {
             response = restClient.get()
-                    .uri(url)
+                    .uri(uri)
                     .header("User-Agent", properties.getUserAgent())
                     .retrieve()
                     .toEntity(String.class);

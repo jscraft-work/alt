@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -275,6 +276,33 @@ class YfinanceMacroAdapterTest {
 
         assertThat(capturedUserAgents).isNotEmpty();
         assertThat(capturedUserAgents.values()).allSatisfy(v -> assertThat(v).isEqualTo(customUa));
+    }
+
+    @Test
+    void caretTickerPathIsEncodedExactlyOnce() {
+        AtomicReference<String> capturedRawPath = new AtomicReference<>();
+        server.createContext("/", exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            String ticker = decodeTicker(path);
+            if ("^GSPC".equals(ticker)) {
+                capturedRawPath.set(exchange.getRequestURI().getRawPath());
+            }
+            if (ticker == null || !"^GSPC".equals(ticker)) {
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
+                return;
+            }
+            String body = chartBody(new Double[]{5700.0, 5800.0}, 5800.0, 5700.0);
+            writeJson(exchange, 200, body);
+        });
+
+        YfinanceMacroAdapter adapter = newAdapter(properties(baseUrl(), 5, 1));
+
+        MacroSnapshot snapshot = adapter.fetchDailyMacro(LocalDate.of(2026, 5, 12));
+
+        assertThat(snapshot.payload().get("raw_data").has("^GSPC")).isTrue();
+        assertThat(capturedRawPath.get()).isEqualTo(CHART_PATH_PREFIX + "%5EGSPC");
+        assertThat(capturedRawPath.get()).doesNotContain("%255E");
     }
 
     @Test
