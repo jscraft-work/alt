@@ -1,6 +1,7 @@
 package work.jscraft.alt.integrations.naver;
 
 import java.net.SocketTimeoutException;
+import java.net.http.HttpClient;
 import java.net.http.HttpTimeoutException;
 import java.time.Clock;
 import java.time.Duration;
@@ -77,7 +78,10 @@ public class NaverNewsAdapter implements NewsGateway {
 
     private static RestClient buildRestClient(int timeoutSeconds) {
         Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds));
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
+        HttpClient httpClient = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(timeout);
         return RestClient.builder()
                 .requestFactory(factory)
