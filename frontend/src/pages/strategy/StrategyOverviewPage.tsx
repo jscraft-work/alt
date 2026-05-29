@@ -226,19 +226,19 @@ export default function StrategyOverviewPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             <SideLink
-              to={`/strategy/${instanceId}/paper-eval`}
+              to={`/paper-eval?instanceId=${instanceId}`}
               icon={<Gauge className="size-4" />}
               label="paper 평가"
               hint="4지표 + 시계열 + 직전 N건"
             />
             <SideLink
-              to={`/strategy/${instanceId}/trade-history`}
+              to={`/trade-history?instanceId=${instanceId}`}
               icon={<LineChart className="size-4" />}
               label="매매 이력"
               hint="페이지네이션 + 필터"
             />
             <SideLink
-              to={`/strategy/${instanceId}/portfolio`}
+              to={`/portfolio?instanceId=${instanceId}`}
               icon={<Briefcase className="size-4" />}
               label="포트폴리오"
               hint="보유 종목 + 최근 활동"

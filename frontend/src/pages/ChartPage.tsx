@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import MinuteChart from "@/components/chart/MinuteChart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { useAssetMasters } from "@/hooks/use-asset-masters";
 import { useOrderOverlays, useMinuteBars } from "@/hooks/use-charts";
+import { usePageInstanceSync } from "@/hooks/use-page-instance-sync";
 import { useStrategyInstanceSelection } from "@/hooks/use-strategy-instance-selection";
 import { useSelectableStrategyInstances } from "@/hooks/use-strategy-instances";
 import type { ChartOrderOverlay, MinuteBar } from "@/lib/api-types";
@@ -49,6 +51,7 @@ interface ChartDateRange {
 }
 
 export default function ChartPage() {
+  usePageInstanceSync();
   const { selectedInstanceId, setSelectedInstanceId } =
     useStrategyInstanceSelection();
   const {
@@ -59,6 +62,8 @@ export default function ChartPage() {
   const { data: assets, isLoading: isAssetsLoading } = useAssetMasters({
     hidden: false,
   });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlSymbol = searchParams.get("symbol");
   const [filters, setFilters] = useState<ChartFilters>(createInitialFilters);
   const [appliedFilters, setAppliedFilters] = useState<ChartFilters | null>(null);
   const [loadedRange, setLoadedRange] = useState<ChartDateRange | null>(null);
@@ -71,29 +76,40 @@ export default function ChartPage() {
     barCount: number;
   } | null>(null);
 
-  // 페이지 진입 시 첫 종목 + 오늘 날짜로 자동 조회.
+  // 페이지 진입 시 자동 조회 — URL `?symbol=` 이 있으면 그 종목, 없으면 첫 종목.
   useEffect(() => {
     if (appliedFilters !== null) return;
     const first = assets?.[0];
-    if (!first) return;
+    if (!urlSymbol && !first) return;
+    const nextSymbol = urlSymbol ?? first?.symbolCode ?? "";
+    if (!nextSymbol) return;
     const next = {
-      symbolCode: first.symbolCode,
+      symbolCode: nextSymbol,
       date: getTodayInKst(),
     };
     setFilters(next);
     setAppliedFilters(next);
-  }, [assets, appliedFilters]);
+  }, [assets, appliedFilters, urlSymbol]);
 
   const shouldFetch = appliedFilters !== null;
   const selectedInstance =
     selectableInstances?.find((instance) => instance.id === selectedInstanceId) ??
     null;
 
+  const writeSymbolToUrl = (nextSymbol: string) => {
+    if (!nextSymbol) return;
+    if (nextSymbol === searchParams.get("symbol")) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("symbol", nextSymbol);
+    setSearchParams(next, { replace: true });
+  };
+
   const applySymbol = (symbolCode: string) => {
     const date = filters.date || getTodayInKst();
     const next = { symbolCode, date };
     setFilters(next);
     setAppliedFilters(next);
+    writeSymbolToUrl(symbolCode);
   };
 
   useEffect(() => {
@@ -246,11 +262,18 @@ export default function ChartPage() {
 
     setFilters(nextFilters);
     setAppliedFilters(nextFilters);
+    writeSymbolToUrl(nextFilters.symbolCode);
   };
 
   const onReset = () => {
     setFilters(createInitialFilters());
     setAppliedFilters(null);
+    // URL `?symbol=` 도 정리
+    if (searchParams.has("symbol")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("symbol");
+      setSearchParams(next, { replace: true });
+    }
   };
 
   return (

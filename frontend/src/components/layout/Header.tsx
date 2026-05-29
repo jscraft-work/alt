@@ -10,7 +10,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import StrategyInstanceSelector from "./StrategyInstanceSelector";
 
 /**
  * docs/spec2.md §6.1 — 우측 상단 테마 토글 + 로그인/로그아웃,
@@ -18,6 +17,9 @@ import StrategyInstanceSelector from "./StrategyInstanceSelector";
  *
  * 운영자 모드/공개 모드 구분: 인증 사용자가 있으면 사용자 아이콘과
  * 로그아웃 메뉴를 보여주고, 없으면 "로그인" 링크만 보여준다.
+ *
+ * F6 — 글로벌 인스턴스 selector 는 헤더에서 제거됨. 인스턴스 단위 페이지는
+ * 각자 페이지 상단에 자체 selector 를 둔다.
  */
 interface HeaderProps {
   mobileNavOpen: boolean;
@@ -65,8 +67,6 @@ export default function Header({
             <Menu className="size-5" />
           )}
         </Button>
-
-        <StrategyInstanceSelector />
       </div>
 
       {/* 우측: 테마 + 인증 */}

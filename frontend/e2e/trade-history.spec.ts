@@ -2,9 +2,11 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { INSTANCE_ID, mockBaseline } from "./utils/admin-mocks";
 
 /**
- * F5 필수 시나리오 3 — trade-history 페이지.
+ * F5 → F6 시나리오 3 — trade-history 페이지.
  *
- * - /strategy/{id}/trade-history 진입 → 3 SummaryCard + 표
+ * F6 변경: `/strategy/{id}/trade-history` → `/trade-history?instanceId={id}` 로 이동
+ *
+ * - /trade-history?instanceId={id} 진입 → 3 SummaryCard + 표
  * - 종목 필터 → API 재호출
  * - win-only toggle → 재호출
  * - 정렬 버튼 → 재호출
@@ -127,7 +129,7 @@ test.describe("trade-history 화면 (F3)", () => {
 
   test("진입 시 3 SummaryCard + 표 + 페이지네이션 표시", async ({ page }) => {
     await mockTradeHistory(page, { totalElements: 12 });
-    await page.goto(`/strategy/${INSTANCE_ID}/trade-history`);
+    await page.goto(`/trade-history?instanceId=${INSTANCE_ID}`);
 
     await expect(
       page.getByRole("heading", { name: /매매 이력/ }),
@@ -149,7 +151,7 @@ test.describe("trade-history 화면 (F3)", () => {
     const params: URLSearchParams[] = [];
     await mockTradeHistory(page, { requestParams: params, totalElements: 12 });
 
-    await page.goto(`/strategy/${INSTANCE_ID}/trade-history`);
+    await page.goto(`/trade-history?instanceId=${INSTANCE_ID}`);
     await expect.poll(() => params.length).toBeGreaterThanOrEqual(1);
 
     const symbolInput = page.getByPlaceholder("005930");
@@ -165,7 +167,7 @@ test.describe("trade-history 화면 (F3)", () => {
     const params: URLSearchParams[] = [];
     await mockTradeHistory(page, { requestParams: params });
 
-    await page.goto(`/strategy/${INSTANCE_ID}/trade-history`);
+    await page.goto(`/trade-history?instanceId=${INSTANCE_ID}`);
     await expect.poll(() => params.length).toBeGreaterThanOrEqual(1);
 
     await page.getByRole("button", { name: "win only" }).click();
@@ -187,7 +189,7 @@ test.describe("trade-history 화면 (F3)", () => {
     const params: URLSearchParams[] = [];
     await mockTradeHistory(page, { requestParams: params });
 
-    await page.goto(`/strategy/${INSTANCE_ID}/trade-history`);
+    await page.goto(`/trade-history?instanceId=${INSTANCE_ID}`);
     await expect.poll(() => params.length).toBeGreaterThanOrEqual(1);
 
     await page.getByRole("button", { name: /^net pnl/ }).click();
@@ -210,7 +212,7 @@ test.describe("trade-history 화면 (F3)", () => {
       totalElements: 12,
     });
 
-    await page.goto(`/strategy/${INSTANCE_ID}/trade-history`);
+    await page.goto(`/trade-history?instanceId=${INSTANCE_ID}`);
     await expect.poll(() => params.length).toBeGreaterThanOrEqual(1);
 
     // default page size 50 → 1 page only. Next 버튼 disabled.

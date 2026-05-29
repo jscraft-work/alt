@@ -48,12 +48,15 @@ test.describe("strategy overview 화면 (F4 신규)", () => {
     ).toBeVisible();
   });
 
-  test("사이드 quick-link 클릭 → 해당 페이지로 이동", async ({ page }) => {
+  test("사이드 quick-link 클릭 → 글로벌 path + instanceId 로 이동 (F6)", async ({
+    page,
+  }) => {
     await page.goto(`/strategy/${INSTANCE_ID}/overview`);
 
     await page.getByRole("link", { name: /paper 평가/ }).first().click();
+    // F6 — overview 의 quick-link 는 글로벌 path 로 가도록 변경됨
     await expect(page).toHaveURL(
-      new RegExp(`/strategy/${INSTANCE_ID}/paper-eval`),
+      new RegExp(`/paper-eval\\?instanceId=${INSTANCE_ID}`),
     );
   });
 });

@@ -6,9 +6,13 @@ import {
 } from "./utils/admin-mocks";
 
 /**
- * F5 필수 시나리오 1 — paper-eval 페이지.
+ * F5 → F6 시나리오 1 — paper-eval 페이지.
  *
- * - /strategy/{id}/paper-eval 진입 → 4 카드 표시
+ * F6 변경:
+ *  - 진입 경로 `/strategy/{id}/paper-eval` → `/paper-eval?instanceId={id}` 로 이동
+ *  - 기존 `/strategy/{id}/paper-eval` 은 글로벌 path 로 redirect (route-redirect.spec.ts 에서 검증)
+ *
+ * - /paper-eval?instanceId={id} 진입 → 4 카드 표시
  * - lookback preset (10/30/50/100) 변경 시 API 재호출 + 표시값 갱신
  * - 차트 일자 preset (30/60/90) 변경 → series API 재호출
  * - 직전 N건 표 row 수 일치
@@ -144,7 +148,7 @@ test.describe("paper-eval 화면 (F1)", () => {
     page,
   }) => {
     await mockPaperEvalApis(page);
-    await page.goto(`/strategy/${INSTANCE_ID}/paper-eval`);
+    await page.goto(`/paper-eval?instanceId=${INSTANCE_ID}`);
 
     // 페이지 헤더 표시
     await expect(
@@ -180,7 +184,7 @@ test.describe("paper-eval 화면 (F1)", () => {
   }) => {
     const counter = { byLimit: {} as Record<number, number> };
     await mockPaperEvalApis(page, { recentLimitCounter: counter });
-    await page.goto(`/strategy/${INSTANCE_ID}/paper-eval`);
+    await page.goto(`/paper-eval?instanceId=${INSTANCE_ID}`);
 
     // default lookback 30 → recent-matches limit=30 호출 1회
     await expect.poll(() => counter.byLimit[30] ?? 0).toBeGreaterThanOrEqual(1);
@@ -209,7 +213,7 @@ test.describe("paper-eval 화면 (F1)", () => {
     const seriesCalls: number[] = [];
     await mockPaperEvalApis(page, { seriesDaysCalls: seriesCalls });
 
-    await page.goto(`/strategy/${INSTANCE_ID}/paper-eval`);
+    await page.goto(`/paper-eval?instanceId=${INSTANCE_ID}`);
 
     await expect.poll(() => seriesCalls).toContain(30);
 

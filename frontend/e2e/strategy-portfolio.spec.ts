@@ -7,17 +7,19 @@ import {
 } from "./utils/admin-mocks";
 
 /**
- * F5 보너스 시나리오 7 — strategy portfolio 페이지.
+ * F5 보너스 시나리오 7 → F6 — portfolio 페이지.
+ *
+ * F6 변경: `/strategy/{id}/portfolio` → `/portfolio?instanceId={id}` 로 이동
  */
 
-test.describe("strategy portfolio 화면 (F4 신규)", () => {
+test.describe("portfolio 화면 (F6 — 글로벌 path)", () => {
   test.beforeEach(async ({ page }) => {
     await mockBaseline(page);
     await mockInstanceDashboard(page);
   });
 
   test("진입 시 4 KPI + 보유 종목 표 + 최근 주문 표", async ({ page }) => {
-    await page.goto(`/strategy/${INSTANCE_ID}/portfolio`);
+    await page.goto(`/portfolio?instanceId=${INSTANCE_ID}`);
 
     await expect(
       page.getByRole("heading", {

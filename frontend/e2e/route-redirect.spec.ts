@@ -2,12 +2,20 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { INSTANCE_ID, mockBaseline } from "./utils/admin-mocks";
 
 /**
- * F5 필수 시나리오 4 — 라우트 redirect (F4 기존 path 호환).
+ * F5 → F6 시나리오 4 — 라우트 redirect (F0/F4 기존 path 호환).
  *
- * - /settings/instances/{id}/paper-eval → /strategy/{id}/paper-eval
- * - /settings/instances/{id}/watchlist → /strategy/{id}/watchlist
- * - /settings/instances/{id}/prompt-versions → /strategy/{id}/prompt
- * - /settings/instances/{id}/trade-history → /strategy/{id}/trade-history
+ * F6 변경: 조회 메뉴 (paper-eval / trade-history / portfolio / trades) 는 글로벌 path 로 이동.
+ * 따라서 기존 `/strategy/{id}/<sub>` 와 `/settings/instances/{id}/<sub>` 모두
+ * 글로벌 path + `?instanceId=:id` 로 redirect 한다.
+ *
+ * - /strategy/{id}/paper-eval → /paper-eval?instanceId={id}
+ * - /strategy/{id}/trade-history → /trade-history?instanceId={id}
+ * - /strategy/{id}/portfolio → /portfolio?instanceId={id}
+ * - /strategy/{id}/trades → /trades?instanceId={id}
+ * - /settings/instances/{id}/paper-eval → /paper-eval?instanceId={id}
+ * - /settings/instances/{id}/trade-history → /trade-history?instanceId={id}
+ * - /settings/instances/{id}/watchlist → /strategy/{id}/watchlist (전략 관리에 남음)
+ * - /settings/instances/{id}/prompt-versions → /strategy/{id}/prompt (전략 관리에 남음)
  * - /settings/data-collection → /admin/data-collection
  * - /settings/assets → /admin/asset-master
  * - /settings/models → /admin/llm-models
@@ -211,6 +219,57 @@ async function mockMinimalApis(page: Page): Promise<void> {
       });
     },
   );
+
+  // F6 — 글로벌 path 페이지가 redirect 후 마운트되면서 데이터 페치가 발생할 수 있다.
+  // 빈 응답만 돌려주면 URL assertion 까지 안전하게 도달.
+  await page.route("**/api/dashboard/instances/**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: {
+          instance: {
+            id: INSTANCE_ID,
+            name: "박스 단타 v1",
+            executionMode: "paper",
+            lifecycleState: "active",
+            autoPausedReason: null,
+            budgetAmount: 0,
+            brokerAccountMasked: null,
+          },
+          portfolio: {
+            cashAmount: 0,
+            totalAssetAmount: 0,
+            realizedPnlToday: 0,
+          },
+          positions: [],
+          systemStatus: [],
+          latestDecision: null,
+          recentOrders: [],
+        },
+      }),
+    });
+  });
+  await page.route("**/api/admin/trade-orders**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [],
+        meta: { page: 1, size: 20, totalElements: 0, totalPages: 0 },
+      }),
+    });
+  });
+  await page.route("**/api/admin/trade-decisions**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [],
+        meta: { page: 1, size: 20, totalElements: 0, totalPages: 0 },
+      }),
+    });
+  });
 }
 
 test.describe("라우트 redirect (F4 호환)", () => {
@@ -253,12 +312,12 @@ test.describe("라우트 redirect (F4 호환)", () => {
     await expect(page).toHaveURL(/\/admin\/system-parameters$/);
   });
 
-  test("/settings/instances/{id}/paper-eval → /strategy/{id}/paper-eval", async ({
+  test("/settings/instances/{id}/paper-eval → /paper-eval?instanceId={id}", async ({
     page,
   }) => {
     await page.goto(`/settings/instances/${INSTANCE_ID}/paper-eval`);
     await expect(page).toHaveURL(
-      new RegExp(`/strategy/${INSTANCE_ID}/paper-eval$`),
+      new RegExp(`/paper-eval\\?instanceId=${INSTANCE_ID}$`),
     );
   });
 
@@ -280,12 +339,12 @@ test.describe("라우트 redirect (F4 호환)", () => {
     );
   });
 
-  test("/settings/instances/{id}/trade-history → /strategy/{id}/trade-history", async ({
+  test("/settings/instances/{id}/trade-history → /trade-history?instanceId={id}", async ({
     page,
   }) => {
     await page.goto(`/settings/instances/${INSTANCE_ID}/trade-history`);
     await expect(page).toHaveURL(
-      new RegExp(`/strategy/${INSTANCE_ID}/trade-history$`),
+      new RegExp(`/trade-history\\?instanceId=${INSTANCE_ID}$`),
     );
   });
 
@@ -293,6 +352,43 @@ test.describe("라우트 redirect (F4 호환)", () => {
     await page.goto(`/strategy/${INSTANCE_ID}`);
     await expect(page).toHaveURL(
       new RegExp(`/strategy/${INSTANCE_ID}/overview$`),
+    );
+  });
+
+  // F6 신규 — 조회 메뉴 4종 의 strategy path 도 글로벌 path 로 redirect.
+  test("/strategy/{id}/paper-eval → /paper-eval?instanceId={id}", async ({
+    page,
+  }) => {
+    await page.goto(`/strategy/${INSTANCE_ID}/paper-eval`);
+    await expect(page).toHaveURL(
+      new RegExp(`/paper-eval\\?instanceId=${INSTANCE_ID}$`),
+    );
+  });
+
+  test("/strategy/{id}/trade-history → /trade-history?instanceId={id}", async ({
+    page,
+  }) => {
+    await page.goto(`/strategy/${INSTANCE_ID}/trade-history`);
+    await expect(page).toHaveURL(
+      new RegExp(`/trade-history\\?instanceId=${INSTANCE_ID}$`),
+    );
+  });
+
+  test("/strategy/{id}/portfolio → /portfolio?instanceId={id}", async ({
+    page,
+  }) => {
+    await page.goto(`/strategy/${INSTANCE_ID}/portfolio`);
+    await expect(page).toHaveURL(
+      new RegExp(`/portfolio\\?instanceId=${INSTANCE_ID}$`),
+    );
+  });
+
+  test("/strategy/{id}/trades → /trades?instanceId={id}", async ({
+    page,
+  }) => {
+    await page.goto(`/strategy/${INSTANCE_ID}/trades`);
+    await expect(page).toHaveURL(
+      new RegExp(`/trades\\?instanceId=${INSTANCE_ID}$`),
     );
   });
 });

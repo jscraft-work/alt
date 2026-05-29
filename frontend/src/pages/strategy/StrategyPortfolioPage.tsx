@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import SettingsHeader from "@/components/settings/SettingsHeader";
+import StrategyInstanceSelector from "@/components/layout/StrategyInstanceSelector";
 import { useInstanceDashboard } from "@/hooks/use-dashboard";
+import { usePageInstanceSync } from "@/hooks/use-page-instance-sync";
+import { useStrategyInstanceSelection } from "@/hooks/use-strategy-instance-selection";
 import { useStrategyInstances } from "@/hooks/use-strategy-instances";
 import {
   formatKrw,
@@ -41,8 +44,9 @@ import type {
  * - 최근 주문 표 (recentOrders)
  */
 export default function StrategyPortfolioPage() {
-  const params = useParams();
-  const instanceId = params.id ?? "";
+  usePageInstanceSync();
+  const { selectedInstanceId } = useStrategyInstanceSelection();
+  const instanceId = selectedInstanceId ?? "";
   const instances = useStrategyInstances();
   const dashboard = useInstanceDashboard(instanceId || null);
   const instance = instances.data?.find((row) => row.id === instanceId);
@@ -59,7 +63,26 @@ export default function StrategyPortfolioPage() {
         }
       />
 
-      {dashboard.isLoading && !dashboard.data ? (
+      {/* F6 — 페이지 내부 인스턴스 selector. */}
+      <Card className="py-0">
+        <CardHeader>
+          <CardTitle className="text-base">대상 인스턴스</CardTitle>
+          <CardDescription>
+            인스턴스를 바꾸면 보유 종목 / 최근 주문이 자동 갱신됩니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pb-4">
+          <StrategyInstanceSelector allowAll={false} />
+        </CardContent>
+      </Card>
+
+      {!instanceId ? (
+        <Card>
+          <CardContent className="py-8 text-sm text-muted-foreground">
+            상단 selector 에서 인스턴스를 선택하면 포트폴리오가 표시됩니다.
+          </CardContent>
+        </Card>
+      ) : dashboard.isLoading && !dashboard.data ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> 포트폴리오 불러오는 중…
         </div>

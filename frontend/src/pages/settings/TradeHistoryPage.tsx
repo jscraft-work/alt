@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   ArrowDown,
   ArrowLeft,
@@ -34,8 +34,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import SettingsHeader from "@/components/settings/SettingsHeader";
+import StrategyInstanceSelector from "@/components/layout/StrategyInstanceSelector";
 import FormField from "@/components/settings/FormField";
 import { usePaperTradeHistory } from "@/hooks/use-paper-trade-history";
+import { usePageInstanceSync } from "@/hooks/use-page-instance-sync";
+import { useStrategyInstanceSelection } from "@/hooks/use-strategy-instance-selection";
 import { useStrategyInstances } from "@/hooks/use-strategy-instances";
 import {
   formatKstDateTime,
@@ -61,8 +64,9 @@ import type {
 const PAGE_SIZE = 50;
 
 export default function TradeHistoryPage() {
-  const params = useParams();
-  const instanceId = params.id ?? "";
+  usePageInstanceSync();
+  const { selectedInstanceId } = useStrategyInstanceSelection();
+  const instanceId = selectedInstanceId ?? "";
   const instances = useStrategyInstances();
   const instance = instances.data?.find((row) => row.id === instanceId);
 
@@ -140,32 +144,34 @@ export default function TradeHistoryPage() {
             <Button variant="outline" render={<Link to="/strategy" />}>
               <ArrowLeft className="size-4" /> 인스턴스 목록
             </Button>
-            <Button
-              variant="outline"
-              render={
-                <Link to={`/strategy/${instanceId}/paper-eval`} />
-              }
-            >
-              <Gauge className="size-4" /> paper 평가
-            </Button>
-            <Button
-              variant="outline"
-              render={
-                <Link to={`/strategy/${instanceId}/watchlist`} />
-              }
-            >
-              <Eye className="size-4" /> 감시 종목
-            </Button>
-            <Button
-              variant="outline"
-              render={
-                <Link
-                  to={`/strategy/${instanceId}/prompt`}
-                />
-              }
-            >
-              <History className="size-4" /> 프롬프트 버전
-            </Button>
+            {instanceId ? (
+              <>
+                <Button
+                  variant="outline"
+                  render={
+                    <Link to={`/paper-eval?instanceId=${instanceId}`} />
+                  }
+                >
+                  <Gauge className="size-4" /> paper 평가
+                </Button>
+                <Button
+                  variant="outline"
+                  render={
+                    <Link to={`/strategy/${instanceId}/watchlist`} />
+                  }
+                >
+                  <Eye className="size-4" /> 감시 종목
+                </Button>
+                <Button
+                  variant="outline"
+                  render={
+                    <Link to={`/strategy/${instanceId}/prompt`} />
+                  }
+                >
+                  <History className="size-4" /> 프롬프트 버전
+                </Button>
+              </>
+            ) : null}
             <Button
               variant="outline"
               onClick={() => void history.refetch()}
@@ -182,6 +188,27 @@ export default function TradeHistoryPage() {
           </>
         }
       />
+
+      {/* F6 — 페이지 내부 인스턴스 selector. */}
+      <Card className="py-0">
+        <CardHeader>
+          <CardTitle className="text-base">대상 인스턴스</CardTitle>
+          <CardDescription>
+            인스턴스를 바꾸면 표/요약 카드 / 필터가 자동으로 갱신됩니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pb-4">
+          <StrategyInstanceSelector allowAll={false} />
+        </CardContent>
+      </Card>
+
+      {!instanceId ? (
+        <Card>
+          <CardContent className="py-8 text-sm text-muted-foreground">
+            상단 selector 에서 인스턴스를 선택하면 매매 이력이 표시됩니다.
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* 상단 요약 */}
       <section

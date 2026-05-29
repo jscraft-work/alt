@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   ArrowLeft,
   Eye,
@@ -27,12 +27,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import SettingsHeader from "@/components/settings/SettingsHeader";
+import StrategyInstanceSelector from "@/components/layout/StrategyInstanceSelector";
 import PaperEvalSeriesChart from "@/components/dashboard/PaperEvalSeriesChart";
 import {
   usePaperEvalRecentMatches,
   usePaperEvalSeries,
   usePaperEvalSnapshot,
 } from "@/hooks/use-paper-eval";
+import { usePageInstanceSync } from "@/hooks/use-page-instance-sync";
+import { useStrategyInstanceSelection } from "@/hooks/use-strategy-instance-selection";
 import { useStrategyInstances } from "@/hooks/use-strategy-instances";
 import {
   formatKstDateTime,
@@ -63,8 +66,9 @@ const LOOKBACK_PRESETS = [10, 30, 50, 100] as const;
 const SERIES_DAYS_PRESETS = [30, 60, 90] as const;
 
 export default function PaperEvalPage() {
-  const params = useParams();
-  const instanceId = params.id ?? "";
+  usePageInstanceSync();
+  const { selectedInstanceId } = useStrategyInstanceSelection();
+  const instanceId = selectedInstanceId ?? "";
   const instances = useStrategyInstances();
   const instance = instances.data?.find((row) => row.id === instanceId);
 
@@ -99,30 +103,34 @@ export default function PaperEvalPage() {
             <Button variant="outline" render={<Link to="/strategy" />}>
               <ArrowLeft className="size-4" /> 인스턴스 목록
             </Button>
-            <Button
-              variant="outline"
-              render={<Link to={`/strategy/${instanceId}/watchlist`} />}
-            >
-              <Eye className="size-4" /> 감시 종목
-            </Button>
-            <Button
-              variant="outline"
-              render={
-                <Link
-                  to={`/strategy/${instanceId}/prompt`}
-                />
-              }
-            >
-              <History className="size-4" /> 프롬프트 버전
-            </Button>
-            <Button
-              variant="outline"
-              render={
-                <Link to={`/strategy/${instanceId}/trade-history`} />
-              }
-            >
-              <LineChart className="size-4" /> 전체 매매 이력
-            </Button>
+            {instanceId ? (
+              <>
+                <Button
+                  variant="outline"
+                  render={
+                    <Link to={`/strategy/${instanceId}/watchlist`} />
+                  }
+                >
+                  <Eye className="size-4" /> 감시 종목
+                </Button>
+                <Button
+                  variant="outline"
+                  render={
+                    <Link to={`/strategy/${instanceId}/prompt`} />
+                  }
+                >
+                  <History className="size-4" /> 프롬프트 버전
+                </Button>
+                <Button
+                  variant="outline"
+                  render={
+                    <Link to={`/trade-history?instanceId=${instanceId}`} />
+                  }
+                >
+                  <LineChart className="size-4" /> 전체 매매 이력
+                </Button>
+              </>
+            ) : null}
             <Button
               variant="outline"
               onClick={refetchAll}
@@ -140,8 +148,30 @@ export default function PaperEvalPage() {
         }
       />
 
+      {/* F6 — 페이지 내부 인스턴스 selector. 변경 시 query param 자동 갱신 + 데이터 재페치. */}
+      <Card className="py-0">
+        <CardHeader>
+          <CardTitle className="text-base">대상 인스턴스</CardTitle>
+          <CardDescription>
+            인스턴스를 바꾸면 4지표 / 차트 / 최근 매매가 자동으로 갱신됩니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pb-4">
+          <StrategyInstanceSelector allowAll={false} />
+        </CardContent>
+      </Card>
+
       {instances.error ? (
         <p className="text-sm text-destructive">{instances.error.message}</p>
+      ) : null}
+
+      {!instanceId ? (
+        <Card>
+          <CardContent className="py-8 text-sm text-muted-foreground">
+            상단 selector 에서 인스턴스를 선택하면 paper 평가 지표가
+            표시됩니다.
+          </CardContent>
+        </Card>
       ) : null}
 
       <Card className="py-0">

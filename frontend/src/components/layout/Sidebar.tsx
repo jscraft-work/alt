@@ -23,22 +23,27 @@ import { cn } from "@/lib/utils";
 import { useStrategyInstances } from "@/hooks/use-strategy-instances";
 
 /**
- * F4 라우트 재구성 후 nav 구조.
+ * F6 LNB 재구성 — 3 카테고리.
  *
- * 글로벌 메뉴:
- *  - 대시보드, 뉴스/공시, 차트 (read-only 뷰)
- *  - admin: 데이터수집 / 자산마스터 / LLM 모델 / 시스템파라미터 / audit-log / 전략 템플릿 / 브로커 계좌
+ * 1) 조회 / 대시보드 (글로벌 path, 페이지 내부 selector 로 인스턴스 전환)
+ *    - 대시보드, 차트, 뉴스/공시, 매매·판단, 매매 이력, paper 평가, 포트폴리오
  *
- * 전략별 메뉴:
- *  - `/strategy` (인스턴스 목록)
- *  - URL 이 `/strategy/{id}/...` 일 때만 sub-nav 노출:
- *    overview / paper-eval / trade-history / portfolio / trades / watchlist / prompt / settings
+ * 2) 전략 관리 (특정 인스턴스 편집은 :id path 유지)
+ *    - 인스턴스 목록 → 인스턴스 선택 시 sub-nav 노출 (개요/설정/프롬프트/감시종목)
+ *
+ * 3) 관리 (운영 글로벌)
+ *    - 데이터 수집 / 자산 마스터 / LLM 모델 / 시스템 파라미터 / audit-log /
+ *      전략 템플릿 / 브로커 계좌
  */
 
-const GLOBAL_NAV = [
+const VIEW_NAV = [
   { to: "/", label: "대시보드", icon: LayoutDashboard, end: true },
-  { to: "/news", label: "뉴스·공시", icon: Newspaper, end: false },
   { to: "/chart", label: "차트", icon: BarChart3, end: false },
+  { to: "/news", label: "뉴스·공시", icon: Newspaper, end: false },
+  { to: "/trades", label: "매매·판단", icon: LineChart, end: false },
+  { to: "/trade-history", label: "매매 이력", icon: History, end: false },
+  { to: "/paper-eval", label: "paper 평가", icon: Gauge, end: false },
+  { to: "/portfolio", label: "포트폴리오", icon: Briefcase, end: false },
 ] as const;
 
 const ADMIN_CHILDREN = [
@@ -55,6 +60,7 @@ const ADMIN_CHILDREN = [
   { to: "/admin/audit-log", label: "audit-log", icon: FileText },
 ] as const;
 
+/** F6 — 전략 관리 sub-nav 는 인스턴스 편집 메뉴만 (조회 메뉴는 [조회] 로 이동). */
 const INSTANCE_CHILDREN = (id: string) =>
   [
     {
@@ -63,29 +69,9 @@ const INSTANCE_CHILDREN = (id: string) =>
       icon: LayoutDashboard,
     },
     {
-      to: `/strategy/${id}/paper-eval`,
-      label: "paper 평가",
-      icon: Gauge,
-    },
-    {
-      to: `/strategy/${id}/trade-history`,
-      label: "매매 이력",
-      icon: LineChart,
-    },
-    {
-      to: `/strategy/${id}/portfolio`,
-      label: "포트폴리오",
-      icon: Briefcase,
-    },
-    {
-      to: `/strategy/${id}/trades`,
-      label: "매매·판단",
-      icon: LineChart,
-    },
-    {
-      to: `/strategy/${id}/watchlist`,
-      label: "감시 종목",
-      icon: Eye,
+      to: `/strategy/${id}/settings`,
+      label: "인스턴스 설정",
+      icon: Settings,
     },
     {
       to: `/strategy/${id}/prompt`,
@@ -93,9 +79,9 @@ const INSTANCE_CHILDREN = (id: string) =>
       icon: History,
     },
     {
-      to: `/strategy/${id}/settings`,
-      label: "인스턴스 설정",
-      icon: Settings,
+      to: `/strategy/${id}/watchlist`,
+      label: "감시 종목",
+      icon: Eye,
     },
   ] as const;
 
@@ -158,9 +144,10 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
           className="flex-1 overflow-y-auto p-3"
           aria-label="메인 메뉴"
         >
-          {/* 글로벌 */}
+          {/* ── 조회 / 대시보드 ── */}
+          <SidebarCategoryLabel label="조회 / 대시보드" />
           <ul className="flex flex-col gap-1">
-            {GLOBAL_NAV.map(({ to, label, icon: Icon, end }) => (
+            {VIEW_NAV.map(({ to, label, icon: Icon, end }) => (
               <li key={to}>
                 <NavLink
                   to={to}
@@ -182,9 +169,9 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
             ))}
           </ul>
 
-          {/* 전략 */}
+          {/* ── 전략 관리 ── */}
           <SidebarSectionHeader
-            label="전략"
+            label="전략 관리"
             active={strategyActive}
             open={strategyOpen}
             onToggle={() => setStrategyToggle(!strategyOpen)}
@@ -241,9 +228,9 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
             </ul>
           ) : null}
 
-          {/* admin */}
+          {/* ── 관리 ── */}
           <SidebarSectionHeader
-            label="admin"
+            label="관리"
             active={adminActive}
             open={adminOpen}
             onToggle={() => setAdminToggle(!adminOpen)}
@@ -274,6 +261,14 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
         </nav>
       </aside>
     </>
+  );
+}
+
+function SidebarCategoryLabel({ label }: { label: string }) {
+  return (
+    <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {label}
+    </p>
   );
 }
 

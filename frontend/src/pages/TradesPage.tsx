@@ -31,6 +31,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import StrategyInstanceSelector from "@/components/layout/StrategyInstanceSelector";
+import { usePageInstanceSync } from "@/hooks/use-page-instance-sync";
 import { useStrategyInstanceSelection } from "@/hooks/use-strategy-instance-selection";
 import {
   useTradeDecisionDetail,
@@ -97,6 +99,7 @@ interface DecisionFilters {
 }
 
 export default function TradesPage() {
+  usePageInstanceSync();
   const { selectedInstanceId } = useStrategyInstanceSelection();
 
   const [tab, setTab] = useState<TradesTab>("orders");
@@ -217,6 +220,20 @@ export default function TradesPage() {
         </Button>
       </header>
 
+      {/* F6 — 페이지 내부 인스턴스 selector. */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">대상 인스턴스</CardTitle>
+          <CardDescription>
+            "전체 전략" 을 선택하면 모든 인스턴스의 주문/판단을 한 표에서
+            확인합니다. 인스턴스를 선택하면 해당 인스턴스로 좁혀서 표시합니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pb-4">
+          <StrategyInstanceSelector />
+        </CardContent>
+      </Card>
+
       <div className="flex flex-wrap items-center gap-2">
         <TabButton
           active={tab === "orders"}
@@ -236,9 +253,6 @@ export default function TradesPage() {
           }}
           label="판단 로그"
         />
-        <span className="text-xs text-muted-foreground">
-          전역 선택 인스턴스는 기본 필터로 자동 반영됩니다.
-        </span>
       </div>
 
       <Card>

@@ -14,16 +14,28 @@ import DashboardPage from "@/pages/DashboardPage";
 import { ensureCsrfToken } from "@/lib/api";
 
 /**
- * 라우트 구성 — F4 재구성 후.
+ * 라우트 구성 — F6 재구성 후.
  *
- * 글로벌 path (`/admin/*`):
- *  - /admin/data-collection, /admin/asset-master, /admin/llm-models, /admin/system-parameters
- *  - /admin/audit-log (신규), /admin/strategy-templates, /admin/broker-accounts
+ * 조회/대시보드 (글로벌 path, 페이지 내부 인스턴스 selector):
+ *  - /                대시보드
+ *  - /chart           차트 (종목 + 인스턴스 selector)
+ *  - /news            뉴스/공시
+ *  - /trades          매매·판단 (인스턴스 selector)
+ *  - /trade-history   매매 이력 (인스턴스 selector)
+ *  - /paper-eval      paper 평가 (인스턴스 selector)
+ *  - /portfolio       포트폴리오 (인스턴스 selector)
  *
- * 전략별 path (`/strategy/*`):
- *  - /strategy (인스턴스 목록), /strategy/:id/overview / paper-eval / trade-history / portfolio / trades / watchlist / prompt / settings
+ * 전략 관리 (`/strategy/*`):
+ *  - /strategy                  인스턴스 목록
+ *  - /strategy/:id/overview / settings / prompt / watchlist
  *
- * 기존 `/settings/*` path 는 모두 신규 path 로 redirect (북마크 호환).
+ * 관리 (`/admin/*`):
+ *  - /admin/data-collection / asset-master / llm-models / system-parameters
+ *  - /admin/audit-log / strategy-templates / broker-accounts
+ *
+ * Legacy redirect (북마크 호환):
+ *  - F4 path `/strategy/:id/{paper-eval, trade-history, portfolio, trades}` → 글로벌 path + `?instanceId=:id`
+ *  - F0 `/settings/*` → 신규 path
  */
 
 const queryClient = new QueryClient({
@@ -94,12 +106,35 @@ function RouteLoadingFallback() {
 }
 
 /**
- * 기존 `/settings/instances/:id/<sub>` → `/strategy/:id/<sub>` redirect.
- * sub 매핑은 F4 path 변경에 정합 — prompt-versions → prompt 등.
+ * 기존 `/settings/instances/:id/<sub>` → `/strategy/:id/<sub>` redirect (F4 호환).
  */
-function RedirectInstanceSubpath({ subpath }: { subpath: string }) {
+function RedirectInstanceSubpathToStrategy({
+  subpath,
+}: {
+  subpath: string;
+}) {
   const params = useParams();
   return <Navigate to={`/strategy/${params.id}/${subpath}`} replace />;
+}
+
+/**
+ * F6 — `/strategy/:id/<sub>` 또는 `/settings/instances/:id/<sub>` 의 일부 (조회 메뉴) 를
+ * 글로벌 path + `?instanceId=:id` 로 redirect.
+ *
+ * 예: `/strategy/abc/paper-eval` → `/paper-eval?instanceId=abc`
+ */
+function RedirectInstanceSubpathToGlobal({
+  globalPath,
+}: {
+  globalPath: string;
+}) {
+  const params = useParams();
+  return (
+    <Navigate
+      to={`${globalPath}?instanceId=${encodeURIComponent(params.id ?? "")}`}
+      replace
+    />
+  );
 }
 
 export default function App() {
@@ -124,7 +159,7 @@ export default function App() {
               }
             />
             <Route element={<AppShell />}>
-              {/* ── 글로벌 (비인스턴스) ── */}
+              {/* ── 조회/대시보드 (글로벌 path) ── */}
               <Route index element={<DashboardPage />} />
               <Route
                 path="trades"
@@ -148,6 +183,36 @@ export default function App() {
                   <LazyRoute>
                     <ChartPage />
                   </LazyRoute>
+                }
+              />
+              <Route
+                path="paper-eval"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <PaperEvalPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="trade-history"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <TradeHistoryPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="portfolio"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <StrategyPortfolioPage />
+                    </LazyRoute>
+                  </RequireAuth>
                 }
               />
 
@@ -231,7 +296,7 @@ export default function App() {
                 }
               />
 
-              {/* ── /strategy/* ── */}
+              {/* ── /strategy/* (전략 관리) ── */}
               <Route
                 path="strategy"
                 element={
@@ -252,46 +317,6 @@ export default function App() {
                   <RequireAuth>
                     <LazyRoute>
                       <StrategyOverviewPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="strategy/:id/paper-eval"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <PaperEvalPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="strategy/:id/trade-history"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <TradeHistoryPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="strategy/:id/portfolio"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <StrategyPortfolioPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="strategy/:id/trades"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <TradesPage />
                     </LazyRoute>
                   </RequireAuth>
                 }
@@ -327,7 +352,33 @@ export default function App() {
                 }
               />
 
-              {/* ── 기존 /settings/* path → 새 path redirect (북마크 호환) ── */}
+              {/* ── F4 → F6 redirect (조회 메뉴는 글로벌 path 로 이동, 북마크 호환) ── */}
+              <Route
+                path="strategy/:id/paper-eval"
+                element={
+                  <RedirectInstanceSubpathToGlobal globalPath="/paper-eval" />
+                }
+              />
+              <Route
+                path="strategy/:id/trade-history"
+                element={
+                  <RedirectInstanceSubpathToGlobal globalPath="/trade-history" />
+                }
+              />
+              <Route
+                path="strategy/:id/portfolio"
+                element={
+                  <RedirectInstanceSubpathToGlobal globalPath="/portfolio" />
+                }
+              />
+              <Route
+                path="strategy/:id/trades"
+                element={
+                  <RedirectInstanceSubpathToGlobal globalPath="/trades" />
+                }
+              />
+
+              {/* ── F0 `/settings/*` → 신규 path redirect (북마크 호환) ── */}
               <Route
                 path="settings"
                 element={<Navigate to="/strategy" replace />}
@@ -366,20 +417,26 @@ export default function App() {
               />
               <Route
                 path="settings/instances/:id/prompt-versions"
-                element={<RedirectInstanceSubpath subpath="prompt" />}
+                element={
+                  <RedirectInstanceSubpathToStrategy subpath="prompt" />
+                }
               />
               <Route
                 path="settings/instances/:id/watchlist"
-                element={<RedirectInstanceSubpath subpath="watchlist" />}
+                element={
+                  <RedirectInstanceSubpathToStrategy subpath="watchlist" />
+                }
               />
               <Route
                 path="settings/instances/:id/paper-eval"
-                element={<RedirectInstanceSubpath subpath="paper-eval" />}
+                element={
+                  <RedirectInstanceSubpathToGlobal globalPath="/paper-eval" />
+                }
               />
               <Route
                 path="settings/instances/:id/trade-history"
                 element={
-                  <RedirectInstanceSubpath subpath="trade-history" />
+                  <RedirectInstanceSubpathToGlobal globalPath="/trade-history" />
                 }
               />
 
