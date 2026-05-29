@@ -89,7 +89,6 @@ public class KisProperties {
 
     public static class WebSocket {
 
-        private boolean enabled = false;
         private String wsUrl = "ws://ops.koreainvestment.com:21000";
         private int approvalTimeoutSeconds = 10;
         private String approvalCacheKeyPrefix = "kis:ws:approval:";
@@ -98,14 +97,6 @@ public class KisProperties {
         private long reconnectInitialBackoffMillis = 1000L;
         private long reconnectMaxBackoffMillis = 30000L;
         private int pingIntervalSeconds = 30;
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
 
         public String getWsUrl() {
             return wsUrl;

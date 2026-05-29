@@ -111,10 +111,6 @@ public class KisWebSocketClient {
 
     @PostConstruct
     void onStart() {
-        if (!properties.getWebsocket().isEnabled()) {
-            log.info("KIS WS disabled");
-            return;
-        }
         connect();
     }
 

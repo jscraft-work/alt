@@ -98,7 +98,6 @@ app:
     token-timeout-seconds: ${KIS_TOKEN_TIMEOUT_SECONDS:10}
     token-safety-margin-seconds: ${KIS_TOKEN_SAFETY_MARGIN_SECONDS:300}
     websocket:
-      enabled: ${KIS_WS_ENABLED:false}
       ws-url: ${KIS_WS_URL:ws://ops.koreainvestment.com:21000}
       approval-timeout-seconds: ${KIS_WS_APPROVAL_TIMEOUT_SECONDS:10}
       approval-safety-margin-seconds: ${KIS_WS_APPROVAL_SAFETY_MARGIN_SECONDS:3600}

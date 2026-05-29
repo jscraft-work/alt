@@ -68,7 +68,7 @@ public class WsSubscriptionReconciler {
     @Scheduled(
             initialDelayString = "${app.ws.reconcile.initial-delay-ms:30000}",
             fixedDelayString = "${app.ws.reconcile.interval-ms:60000}")
-    @Transactional(readOnly = true)
+    @Transactional
     public void reconcile() {
         Set<String> desired = collectDesiredSymbols();
         Set<String> current = new HashSet<>(kisWebSocketClient.subscribedCodes());
