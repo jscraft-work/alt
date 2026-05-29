@@ -49,6 +49,12 @@ class DashboardPortfolioProjectionTest extends TradingCycleIntegrationTestSuppor
         AssetMasterEntity samsung = createAsset("005930", "삼성전자", null);
         linkWatchlist(instance, samsung);
         seedPortfolio(instance, new BigDecimal("5000000.0000"));
+        // walker 호가 시드 — M1 PaperOrderExecutor 가 walk 시뮬에 사용
+        seedOrderbook("005930",
+                java.util.List.of(80_000L, 80_100L, 80_200L, 80_300L, 80_400L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L),
+                java.util.List.of(79_900L, 79_800L, 79_700L, 79_600L, 79_500L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L));
 
         fakeTradingDecisionEngine.primeSuccess("""
                 {
@@ -65,15 +71,17 @@ class DashboardPortfolioProjectionTest extends TradingCycleIntegrationTestSuppor
                 .isEqualTo(CycleResult.Status.COMPLETED);
 
         // 대시보드 인스턴스 조회: 갱신된 portfolio가 응답에 반영되어야 한다.
+        // M1: walker avgFilled 80,100 (한 틱 양보) + commission → paperActual 400,556.07 → cash 4,599,443.93
+        // total = cash + positions*avg = 4,599,443.93 + 5*80,100 = 4,999,943.93
         mockMvc.perform(get("/api/dashboard/instances/{id}", instance.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.portfolio.cashAmount").value(4600000.0000))
-                .andExpect(jsonPath("$.data.portfolio.totalAssetAmount").value(5000000.0000))
+                .andExpect(jsonPath("$.data.portfolio.cashAmount").value(4599443.9300))
+                .andExpect(jsonPath("$.data.portfolio.totalAssetAmount").value(4999943.9300))
                 .andExpect(jsonPath("$.data.portfolio.realizedPnlToday").value(0))
                 .andExpect(jsonPath("$.data.positions.length()").value(1))
                 .andExpect(jsonPath("$.data.positions[0].symbolCode").value("005930"))
                 .andExpect(jsonPath("$.data.positions[0].quantity").value(5.00000000))
-                .andExpect(jsonPath("$.data.positions[0].avgBuyPrice").value(80000.00000000))
+                .andExpect(jsonPath("$.data.positions[0].avgBuyPrice").value(80100.00000000))
                 .andExpect(jsonPath("$.data.recentOrders.length()").value(1))
                 .andExpect(jsonPath("$.data.recentOrders[0].orderStatus").value("filled"));
 
@@ -81,13 +89,13 @@ class DashboardPortfolioProjectionTest extends TradingCycleIntegrationTestSuppor
         mockMvc.perform(get("/api/dashboard/strategy-overview"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].cashAmount").value(4600000.0000))
-                .andExpect(jsonPath("$.data[0].totalAssetAmount").value(5000000.0000));
+                .andExpect(jsonPath("$.data[0].cashAmount").value(4599443.9300))
+                .andExpect(jsonPath("$.data[0].totalAssetAmount").value(4999943.9300));
 
         // DB 직접 검증
         PortfolioEntity portfolio = portfolioRepository.findByStrategyInstanceId(instance.getId()).orElseThrow();
         org.assertj.core.api.Assertions.assertThat(portfolio.getCashAmount())
-                .isEqualByComparingTo("4600000.0000");
+                .isEqualByComparingTo("4599443.9300");
         PortfolioPositionEntity position = portfolioPositionRepository
                 .findByStrategyInstanceIdAndSymbolCode(instance.getId(), "005930").orElseThrow();
         org.assertj.core.api.Assertions.assertThat(position.getQuantity()).isEqualByComparingTo("5");

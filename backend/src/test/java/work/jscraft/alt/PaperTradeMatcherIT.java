@@ -145,6 +145,39 @@ class PaperTradeMatcherIT extends TradingCycleIntegrationTestSupport {
         assertThat(matches.stream().anyMatch(m -> m.getMatchedQuantity().compareTo(new BigDecimal("2")) == 0)).isTrue();
     }
 
+    /**
+     * (c) 1 BUY 후 1 부분 SELL → BUY 잔량 남음. paper_trade_match 1 row, matched_quantity &lt; buy.filled_quantity.
+     */
+    @Test
+    void singleBuyPartialSell_oneRowWithBuyRemaining() {
+        StrategyInstanceEntity instance = createActiveInstance("KR 매칭 C", "paper");
+        AssetMasterEntity samsung = createAsset("005930", "삼성전자", null);
+        addWatchlist(instance, samsung);
+        seedPortfolio(instance, new BigDecimal("10000000.0000"));
+
+        seedOrderbook("005930",
+                java.util.List.of(80_000L, 80_100L, 80_200L, 80_300L, 80_400L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L),
+                java.util.List.of(79_900L, 79_800L, 79_700L, 79_600L, 79_500L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L));
+        primeBuySingleOrder("005930", 5, 80_000);
+        orchestrator.runOnce(instance.getId(), "test-worker");
+
+        mutableClock.setInstant(Instant.parse("2026-05-11T01:30:00Z"));
+        seedOrderbook("005930",
+                java.util.List.of(81_100L, 81_200L, 81_300L, 81_400L, 81_500L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L),
+                java.util.List.of(81_000L, 80_900L, 80_800L, 80_700L, 80_600L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L));
+        primeSellSingleOrder("005930", 3, 81_000);
+        orchestrator.runOnce(instance.getId(), "test-worker");
+
+        List<PaperTradeMatchEntity> matches = paperTradeMatchRepository.findAll();
+        assertThat(matches).hasSize(1);
+        // BUY 5 주 중 3 주만 매칭 — 잔량 2 주 남음
+        assertThat(matches.get(0).getMatchedQuantity()).isEqualByComparingTo("3");
+    }
+
     private void primeBuySingleOrder(String symbolCode, int quantity, int price) {
         fakeTradingDecisionEngine.primeSuccess("""
                 {

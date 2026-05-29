@@ -66,7 +66,12 @@ class PaperWorkflowSmokeE2ETest extends TradingCycleIntegrationTestSupport {
         portfolio.setRealizedPnlToday(BigDecimal.ZERO);
         portfolioRepository.saveAndFlush(portfolio);
 
-        // 3. (수집 더블) 시세 시드 — paper LIMIT 주문이라 직접 사용 안하지만 차트 API용
+        // 3. walker 호가 시드 — M1 PaperOrderExecutor 가 OrderBookRedisCache 로 호가 walk
+        seedOrderbook("005930",
+                java.util.List.of(80_000L, 80_100L, 80_200L, 80_300L, 80_400L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L),
+                java.util.List.of(79_900L, 79_800L, 79_700L, 79_600L, 79_500L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L));
         // 4. fake 결정엔진이 EXECUTE 반환하도록 prime
         fakeTradingDecisionEngine.primeSuccess("""
                 {
@@ -85,7 +90,8 @@ class PaperWorkflowSmokeE2ETest extends TradingCycleIntegrationTestSupport {
         // 6. 비로그인 대시보드 조회 → 갱신된 portfolio가 반영되어야 한다
         mockMvc.perform(get("/api/dashboard/instances/{id}", instance.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.portfolio.cashAmount").value(4600000.0000))
+                // M1 paper sim: avgFilled 80,100 + commission → paperActual 400,556.07 → cash 4,599,443.93
+                .andExpect(jsonPath("$.data.portfolio.cashAmount").value(4599443.9300))
                 .andExpect(jsonPath("$.data.positions.length()").value(1))
                 .andExpect(jsonPath("$.data.positions[0].symbolCode").value("005930"))
                 .andExpect(jsonPath("$.data.recentOrders[0].orderStatus").value("filled"));
