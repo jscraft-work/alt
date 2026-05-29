@@ -779,6 +779,80 @@ export interface WsUnsubscribeResponse {
 
 export type OpsEventService = "marketdata" | "news" | "disclosure" | "macro";
 
+// ─────────── trade-history (F3) ───────────
+
+export type TradeHistorySortField =
+  | "exit_time"
+  | "net_pnl_pct"
+  | "gross_pnl_pct";
+export type TradeHistorySortDir = "asc" | "desc";
+export type TradeHistorySortSpec = `${TradeHistorySortField}:${TradeHistorySortDir}`;
+
+export interface TradeHistoryFilter {
+  page?: number;
+  size?: number;
+  /** ISO-8601 with offset */
+  from?: string | null;
+  to?: string | null;
+  symbol?: string | null;
+  winOnly?: boolean;
+  lossOnly?: boolean;
+  sort?: TradeHistorySortSpec;
+}
+
+export interface TradeHistoryRow {
+  matchId: string;
+  symbolCode: string;
+  entryTime: string;
+  exitTime: string;
+  holdingMinutes: number;
+  matchedQuantity: ApiDecimal;
+  grossPnlPct: ApiDecimal;
+  netPnlPct: ApiDecimal;
+  // V18 match-level pct (signed for slippage)
+  slippageBuyPct: ApiDecimal | null;
+  slippageSellPct: ApiDecimal | null;
+  sellTaxPct: ApiDecimal | null;
+  feePct: ApiDecimal | null;
+  // V17 buy
+  buyOrderId: string | null;
+  buyRequestedPrice: ApiDecimal | null;
+  buyAvgFilledPrice: ApiDecimal | null;
+  buyRequestedAmount: ApiDecimal | null;
+  buySlippageAmount: ApiDecimal | null;
+  buyCommissionAmount: ApiDecimal | null;
+  buyActualAmount: ApiDecimal | null;
+  buyWalkLevels: number | null;
+  buyPartialFillRatio: ApiDecimal | null;
+  // V17 sell
+  sellOrderId: string | null;
+  sellRequestedPrice: ApiDecimal | null;
+  sellAvgFilledPrice: ApiDecimal | null;
+  sellRequestedAmount: ApiDecimal | null;
+  sellSlippageAmount: ApiDecimal | null;
+  sellSellTaxAmount: ApiDecimal | null;
+  sellCommissionAmount: ApiDecimal | null;
+  sellActualAmount: ApiDecimal | null;
+  sellWalkLevels: number | null;
+  sellPartialFillRatio: ApiDecimal | null;
+}
+
+export interface TradeHistorySummaryView {
+  tradesCount: number;
+  winCount: number;
+  lossCount: number;
+  sumNetPnlPct: ApiDecimal;
+}
+
+export interface TradeHistoryResult {
+  rows: TradeHistoryRow[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  summary: TradeHistorySummaryView;
+}
+
 // ─────────── 시스템 파라미터 §8.21 ───────────
 
 export interface SystemParameter {

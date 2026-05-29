@@ -57,6 +57,9 @@ const PaperEvalPage = lazy(() => import("@/pages/settings/PaperEvalPage"));
 const DataCollectionPage = lazy(
   () => import("@/pages/settings/DataCollectionPage"),
 );
+const TradeHistoryPage = lazy(
+  () => import("@/pages/settings/TradeHistoryPage"),
+);
 const ModelProfilesPage = lazy(
   () => import("@/pages/settings/ModelProfilesPage"),
 );
@@ -186,6 +189,16 @@ export default function App() {
                   <RequireAuth>
                     <LazyRoute>
                       <PaperEvalPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="settings/instances/:id/trade-history"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <TradeHistoryPage />
                     </LazyRoute>
                   </RequireAuth>
                 }

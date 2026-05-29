@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Gauge,
   History,
+  LineChart,
   Loader2,
   Plus,
   Search,
@@ -133,6 +134,14 @@ export default function WatchlistPage() {
               }
             >
               <Gauge className="size-4" /> paper 평가
+            </Button>
+            <Button
+              variant="outline"
+              render={
+                <Link to={`/settings/instances/${instanceId}/trade-history`} />
+              }
+            >
+              <LineChart className="size-4" /> 매매 이력
             </Button>
           </>
         }

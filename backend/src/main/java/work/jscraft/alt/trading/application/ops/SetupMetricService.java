@@ -12,11 +12,17 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import work.jscraft.alt.trading.infrastructure.persistence.PaperTradeMatchEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.PaperTradeMatchRepository;
+import work.jscraft.alt.trading.infrastructure.persistence.PaperTradeMatchRepository.TradeHistorySummary;
+import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderEntity;
 
 /**
  * paper_trade_match 의 직전 N 건 또는 기간별 시계열을 집계해 운영자 4 지표 + 비용 wall 실측 산출.
@@ -253,6 +259,203 @@ public class SetupMetricService {
     public record DailyPnlPoint(
             LocalDate businessDate,
             BigDecimal netPnlPct) {
+    }
+
+    // ─────────── trade-history (F3) ───────────────────
+
+    private static final int MAX_PAGE_SIZE = 200;
+    private static final OffsetDateTime SENTINEL_MIN_TIME =
+            OffsetDateTime.parse("1900-01-01T00:00:00+00:00");
+    private static final OffsetDateTime SENTINEL_MAX_TIME =
+            OffsetDateTime.parse("9999-12-31T23:59:59+00:00");
+    private static final String SENTINEL_SYMBOL = "";
+
+    /**
+     * trade-history 페이지네이션 + 필터 조회. JOIN FETCH 로 V17 컬럼 로드.
+     *
+     * <p>{@code sort} param 예: {@code "exit_time:desc"}, {@code "net_pnl_pct:asc"},
+     * {@code "gross_pnl_pct:desc"}. unknown 필드는 exit_time:desc 로 fallback.
+     */
+    @Transactional(readOnly = true)
+    public TradeHistoryResult findTradeHistory(UUID strategyInstanceId, TradeHistoryFilter filter) {
+        if (filter == null) {
+            throw new IllegalArgumentException("filter 가 null 입니다");
+        }
+        if (filter.winOnly && filter.lossOnly) {
+            throw new IllegalArgumentException("winOnly + lossOnly 동시 활성화 금지");
+        }
+        Pageable pageable = PageRequest.of(
+                Math.max(0, filter.page),
+                Math.max(1, Math.min(filter.size, MAX_PAGE_SIZE)),
+                parseSort(filter.sort));
+
+        OffsetDateTime effectiveFrom = filter.from != null ? filter.from : SENTINEL_MIN_TIME;
+        OffsetDateTime effectiveTo = filter.to != null ? filter.to : SENTINEL_MAX_TIME;
+        String effectiveSymbol = blankToSentinel(filter.symbol);
+
+        Page<PaperTradeMatchEntity> page = paperTradeMatchRepository.findTradeHistory(
+                strategyInstanceId,
+                effectiveFrom,
+                effectiveTo,
+                effectiveSymbol,
+                filter.winOnly,
+                filter.lossOnly,
+                pageable);
+
+        List<TradeHistoryRow> rows = new ArrayList<>(page.getNumberOfElements());
+        for (PaperTradeMatchEntity m : page.getContent()) {
+            rows.add(toRow(m));
+        }
+
+        TradeHistorySummary summary = paperTradeMatchRepository.summarizeTradeHistory(
+                strategyInstanceId,
+                effectiveFrom,
+                effectiveTo,
+                effectiveSymbol,
+                filter.winOnly,
+                filter.lossOnly).orElseGet(() -> new TradeHistorySummary(0L, 0L, BigDecimal.ZERO));
+
+        return new TradeHistoryResult(
+                rows,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                new TradeHistorySummaryView(
+                        summary.tradesCount(),
+                        summary.winCount(),
+                        summary.tradesCount() - summary.winCount(),
+                        nullSafe(summary.sumNetPnlPct())));
+    }
+
+    private static Sort parseSort(String raw) {
+        String spec = raw == null ? "exit_time:desc" : raw.trim();
+        if (spec.isEmpty()) {
+            spec = "exit_time:desc";
+        }
+        String[] parts = spec.split(":", 2);
+        String field = parts[0].trim();
+        String dir = parts.length >= 2 ? parts[1].trim().toLowerCase(java.util.Locale.ROOT) : "desc";
+        String mapped = switch (field) {
+            case "net_pnl_pct" -> "netPnlPct";
+            case "gross_pnl_pct" -> "grossPnlPct";
+            case "exit_time" -> "exitTime";
+            default -> "exitTime";
+        };
+        Sort.Direction direction = "asc".equals(dir) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return Sort.by(direction, mapped);
+    }
+
+    private static String blankToSentinel(String s) {
+        if (s == null) {
+            return SENTINEL_SYMBOL;
+        }
+        String t = s.trim();
+        return t.isEmpty() ? SENTINEL_SYMBOL : t;
+    }
+
+    private static TradeHistoryRow toRow(PaperTradeMatchEntity m) {
+        TradeOrderEntity buy = m.getBuyTradeOrder();
+        TradeOrderEntity sell = m.getSellTradeOrder();
+        return new TradeHistoryRow(
+                m.getId(),
+                m.getSymbolCode(),
+                m.getEntryTime(),
+                m.getExitTime(),
+                m.getHoldingMinutes(),
+                m.getMatchedQuantity(),
+                m.getGrossPnlPct(),
+                m.getNetPnlPct(),
+                // V18 match-level pct
+                m.getSlippageBuyPct(),
+                m.getSlippageSellPct(),
+                m.getSellTaxPct(),
+                m.getFeePct(),
+                // V17 buy
+                buy == null ? null : buy.getId(),
+                buy == null ? null : buy.getRequestedPrice(),
+                buy == null ? null : buy.getAvgFilledPrice(),
+                buy == null ? null : buy.getPaperRequestedAmount(),
+                buy == null ? null : buy.getPaperSlippageAmount(),
+                buy == null ? null : buy.getPaperCommissionAmount(),
+                buy == null ? null : buy.getPaperActualAmount(),
+                buy == null ? null : buy.getPaperWalkLevels(),
+                buy == null ? null : buy.getPaperPartialFillRatio(),
+                // V17 sell
+                sell == null ? null : sell.getId(),
+                sell == null ? null : sell.getRequestedPrice(),
+                sell == null ? null : sell.getAvgFilledPrice(),
+                sell == null ? null : sell.getPaperRequestedAmount(),
+                sell == null ? null : sell.getPaperSlippageAmount(),
+                sell == null ? null : sell.getPaperSellTaxAmount(),
+                sell == null ? null : sell.getPaperCommissionAmount(),
+                sell == null ? null : sell.getPaperActualAmount(),
+                sell == null ? null : sell.getPaperWalkLevels(),
+                sell == null ? null : sell.getPaperPartialFillRatio());
+    }
+
+    public static final class TradeHistoryFilter {
+        public int page = 0;
+        public int size = 50;
+        public OffsetDateTime from;
+        public OffsetDateTime to;
+        public String symbol;
+        public boolean winOnly;
+        public boolean lossOnly;
+        public String sort;
+    }
+
+    public record TradeHistoryResult(
+            List<TradeHistoryRow> rows,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages,
+            TradeHistorySummaryView summary) {
+    }
+
+    public record TradeHistorySummaryView(
+            long tradesCount,
+            long winCount,
+            long lossCount,
+            BigDecimal sumNetPnlPct) {
+    }
+
+    public record TradeHistoryRow(
+            UUID matchId,
+            String symbolCode,
+            OffsetDateTime entryTime,
+            OffsetDateTime exitTime,
+            int holdingMinutes,
+            BigDecimal matchedQuantity,
+            BigDecimal grossPnlPct,
+            BigDecimal netPnlPct,
+            // V18 match-level pct
+            BigDecimal slippageBuyPct,
+            BigDecimal slippageSellPct,
+            BigDecimal sellTaxPct,
+            BigDecimal feePct,
+            // V17 buy side amounts
+            UUID buyOrderId,
+            BigDecimal buyRequestedPrice,
+            BigDecimal buyAvgFilledPrice,
+            BigDecimal buyRequestedAmount,
+            BigDecimal buySlippageAmount,
+            BigDecimal buyCommissionAmount,
+            BigDecimal buyActualAmount,
+            Short buyWalkLevels,
+            BigDecimal buyPartialFillRatio,
+            // V17 sell side amounts
+            UUID sellOrderId,
+            BigDecimal sellRequestedPrice,
+            BigDecimal sellAvgFilledPrice,
+            BigDecimal sellRequestedAmount,
+            BigDecimal sellSlippageAmount,
+            BigDecimal sellSellTaxAmount,
+            BigDecimal sellCommissionAmount,
+            BigDecimal sellActualAmount,
+            Short sellWalkLevels,
+            BigDecimal sellPartialFillRatio) {
     }
 
     /**

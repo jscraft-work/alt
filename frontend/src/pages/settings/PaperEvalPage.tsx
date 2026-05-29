@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Eye,
   History,
+  LineChart,
   Loader2,
   RefreshCcw,
   TrendingUp,
@@ -113,6 +114,14 @@ export default function PaperEvalPage() {
               }
             >
               <History className="size-4" /> 프롬프트 버전
+            </Button>
+            <Button
+              variant="outline"
+              render={
+                <Link to={`/settings/instances/${instanceId}/trade-history`} />
+              }
+            >
+              <LineChart className="size-4" /> 전체 매매 이력
             </Button>
             <Button
               variant="outline"

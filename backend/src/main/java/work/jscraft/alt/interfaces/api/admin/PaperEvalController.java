@@ -1,5 +1,6 @@
 package work.jscraft.alt.interfaces.api.admin;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,6 +15,8 @@ import work.jscraft.alt.trading.application.ops.SetupMetricService;
 import work.jscraft.alt.trading.application.ops.SetupMetricService.DailyPnlPoint;
 import work.jscraft.alt.trading.application.ops.SetupMetricService.MetricSnapshot;
 import work.jscraft.alt.trading.application.ops.SetupMetricService.RecentMatchView;
+import work.jscraft.alt.trading.application.ops.SetupMetricService.TradeHistoryFilter;
+import work.jscraft.alt.trading.application.ops.SetupMetricService.TradeHistoryResult;
 
 /**
  * 운영자 paper-eval API — 박스 단타 v1 인스턴스의 4 지표 + 시계열.
@@ -67,5 +70,38 @@ public class PaperEvalController {
         int effectiveLimit = Math.min(requested, MAX_RECENT_MATCHES_LIMIT);
         List<RecentMatchView> matches = setupMetricService.findRecentMatches(instanceId, effectiveLimit);
         return new ApiDataResponse<>(matches);
+    }
+
+    /**
+     * trade-history 페이지네이션 + 필터 조회 (F3).
+     *
+     * <p>예: {@code /trade-history?page=0&size=50&from=2026-05-01T00:00:00%2B09:00&to=2026-06-01T00:00:00%2B09:00&symbol=005930&winOnly=true&sort=net_pnl_pct:desc}
+     *
+     * @param sort one of {@code "exit_time:desc"}, {@code "exit_time:asc"},
+     *             {@code "net_pnl_pct:desc"}, {@code "net_pnl_pct:asc"},
+     *             {@code "gross_pnl_pct:desc"}, {@code "gross_pnl_pct:asc"}
+     */
+    @GetMapping("/{instanceId}/trade-history")
+    public ApiDataResponse<TradeHistoryResult> tradeHistory(
+            @PathVariable UUID instanceId,
+            @RequestParam(name = "page", required = false, defaultValue = "0") int page,
+            @RequestParam(name = "size", required = false, defaultValue = "50") int size,
+            @RequestParam(name = "from", required = false) OffsetDateTime from,
+            @RequestParam(name = "to", required = false) OffsetDateTime to,
+            @RequestParam(name = "symbol", required = false) String symbol,
+            @RequestParam(name = "winOnly", required = false, defaultValue = "false") boolean winOnly,
+            @RequestParam(name = "lossOnly", required = false, defaultValue = "false") boolean lossOnly,
+            @RequestParam(name = "sort", required = false) String sort) {
+        TradeHistoryFilter filter = new TradeHistoryFilter();
+        filter.page = page;
+        filter.size = size;
+        filter.from = from;
+        filter.to = to;
+        filter.symbol = symbol;
+        filter.winOnly = winOnly;
+        filter.lossOnly = lossOnly;
+        filter.sort = sort;
+        TradeHistoryResult result = setupMetricService.findTradeHistory(instanceId, filter);
+        return new ApiDataResponse<>(result);
     }
 }

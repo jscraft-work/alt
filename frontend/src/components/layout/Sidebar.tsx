@@ -61,7 +61,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
 
   // 특정 인스턴스 하위 settings 페이지에서는 sibling link 를 함께 노출한다.
   const instanceSettingsMatch = location.pathname.match(
-    /^\/settings\/instances\/([^/]+)\/(watchlist|prompt-versions|paper-eval)/,
+    /^\/settings\/instances\/([^/]+)\/(watchlist|prompt-versions|paper-eval|trade-history)/,
   );
   const instanceSettingsBase = instanceSettingsMatch
     ? `/settings/instances/${instanceSettingsMatch[1]}`
@@ -214,6 +214,23 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
                         >
                           <Gauge className="size-4" />
                           paper 평가
+                        </NavLink>
+                      </li>
+                      <li>
+                        <NavLink
+                          to={`${instanceSettingsBase}/trade-history`}
+                          onClick={onCloseMobile}
+                          className={({ isActive }) =>
+                            cn(
+                              "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                              isActive
+                                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                            )
+                          }
+                        >
+                          <LineChart className="size-4" />
+                          매매 이력
                         </NavLink>
                       </li>
                     </>

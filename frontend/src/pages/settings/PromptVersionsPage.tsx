@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Gauge, History, Loader2, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  Gauge,
+  History,
+  LineChart,
+  Loader2,
+  Plus,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,6 +88,14 @@ export default function PromptVersionsPage() {
               render={<Link to={`/settings/instances/${instanceId}/paper-eval`} />}
             >
               <Gauge className="size-4" /> paper 평가
+            </Button>
+            <Button
+              variant="outline"
+              render={
+                <Link to={`/settings/instances/${instanceId}/trade-history`} />
+              }
+            >
+              <LineChart className="size-4" /> 매매 이력
             </Button>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" /> 새 버전

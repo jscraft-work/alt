@@ -24,6 +24,9 @@ import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceWatc
 import work.jscraft.alt.trading.application.cycle.CycleExecutionOrchestrator;
 import work.jscraft.alt.trading.application.ops.SetupMetricService;
 import work.jscraft.alt.trading.application.ops.SetupMetricService.MetricSnapshot;
+import work.jscraft.alt.trading.application.ops.SetupMetricService.TradeHistoryFilter;
+import work.jscraft.alt.trading.application.ops.SetupMetricService.TradeHistoryResult;
+import work.jscraft.alt.trading.application.ops.SetupMetricService.TradeHistoryRow;
 import work.jscraft.alt.trading.infrastructure.persistence.PaperTradeMatchEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.PaperTradeMatchRepository;
 
@@ -212,6 +215,86 @@ class PaperEvalEndToEndIT extends TradingCycleIntegrationTestSupport {
             }
             assertThat(invariantChecked).isEqualTo(3);  // BUY × 2 + SELL × 1
         }
+
+        // ===== Verification 6: trade-history (F3) — 필터 / 정렬 / 페이지네이션 =====
+        // 1) default (no filter) — 2 row, exit_time DESC
+        TradeHistoryFilter base = new TradeHistoryFilter();
+        TradeHistoryResult all = setupMetricService.findTradeHistory(instance.getId(), base);
+        assertThat(all.rows()).hasSize(2);
+        assertThat(all.totalElements()).isEqualTo(2);
+        assertThat(all.summary().tradesCount()).isEqualTo(2);
+        assertThat(all.summary().winCount()).isEqualTo(2);
+        assertThat(all.summary().lossCount()).isZero();
+        assertThat(all.summary().sumNetPnlPct()).isGreaterThan(BigDecimal.ZERO);
+        TradeHistoryRow first = all.rows().get(0);
+        // exit_time DESC 이므로 가장 최근 row 가 먼저
+        assertThat(first.exitTime()).isAfterOrEqualTo(all.rows().get(1).exitTime());
+        // JOIN FETCH 확인 — buy/sell V17 컬럼이 LAZY 외 transaction 밖에서도 접근 가능
+        assertThat(first.buyRequestedAmount()).isGreaterThan(BigDecimal.ZERO);
+        assertThat(first.sellRequestedAmount()).isGreaterThan(BigDecimal.ZERO);
+        assertThat(first.sellSellTaxAmount()).isGreaterThan(BigDecimal.ZERO);
+        assertThat(first.buyWalkLevels()).isNotNull();
+
+        // 2) symbol filter
+        TradeHistoryFilter bySymbol = new TradeHistoryFilter();
+        bySymbol.symbol = "005930";
+        assertThat(setupMetricService.findTradeHistory(instance.getId(), bySymbol).rows())
+                .hasSize(2);
+
+        TradeHistoryFilter byOtherSymbol = new TradeHistoryFilter();
+        byOtherSymbol.symbol = "000660";
+        assertThat(setupMetricService.findTradeHistory(instance.getId(), byOtherSymbol).rows())
+                .isEmpty();
+
+        // 3) winOnly = true → 둘 다 양수라 모두 포함
+        TradeHistoryFilter winOnly = new TradeHistoryFilter();
+        winOnly.winOnly = true;
+        assertThat(setupMetricService.findTradeHistory(instance.getId(), winOnly).rows()).hasSize(2);
+
+        // 4) lossOnly = true → 빈 결과 + summary tradesCount = 0
+        TradeHistoryFilter lossOnly = new TradeHistoryFilter();
+        lossOnly.lossOnly = true;
+        TradeHistoryResult losses = setupMetricService.findTradeHistory(instance.getId(), lossOnly);
+        assertThat(losses.rows()).isEmpty();
+        assertThat(losses.summary().tradesCount()).isZero();
+
+        // 5) winOnly + lossOnly 동시 → IllegalArgumentException
+        TradeHistoryFilter contradict = new TradeHistoryFilter();
+        contradict.winOnly = true;
+        contradict.lossOnly = true;
+        try {
+            setupMetricService.findTradeHistory(instance.getId(), contradict);
+            org.junit.jupiter.api.Assertions.fail("should throw");
+        } catch (IllegalArgumentException ignored) {
+            // expected
+        }
+
+        // 6) pagination size=1 → totalPages=2
+        TradeHistoryFilter paged = new TradeHistoryFilter();
+        paged.size = 1;
+        TradeHistoryResult firstPage = setupMetricService.findTradeHistory(instance.getId(), paged);
+        assertThat(firstPage.rows()).hasSize(1);
+        assertThat(firstPage.totalPages()).isEqualTo(2);
+        assertThat(firstPage.totalElements()).isEqualTo(2);
+
+        paged.page = 1;
+        TradeHistoryResult secondPage = setupMetricService.findTradeHistory(instance.getId(), paged);
+        assertThat(secondPage.rows()).hasSize(1);
+        assertThat(secondPage.rows().get(0).matchId())
+                .isNotEqualTo(firstPage.rows().get(0).matchId());
+
+        // 7) sort by net_pnl_pct ASC → 첫 row 가 net 작은 쪽
+        TradeHistoryFilter asc = new TradeHistoryFilter();
+        asc.sort = "net_pnl_pct:asc";
+        TradeHistoryResult sorted = setupMetricService.findTradeHistory(instance.getId(), asc);
+        assertThat(sorted.rows()).hasSize(2);
+        assertThat(sorted.rows().get(0).netPnlPct())
+                .isLessThanOrEqualTo(sorted.rows().get(1).netPnlPct());
+
+        // 8) date range filter — 미래로 from 설정하면 0 건
+        TradeHistoryFilter future = new TradeHistoryFilter();
+        future.from = java.time.OffsetDateTime.now().plusDays(7);
+        assertThat(setupMetricService.findTradeHistory(instance.getId(), future).rows()).isEmpty();
     }
 
     // ===== helpers =====

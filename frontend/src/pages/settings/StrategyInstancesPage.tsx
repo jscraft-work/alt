@@ -4,6 +4,7 @@ import {
   Copy,
   Gauge,
   History,
+  LineChart,
   ListPlus,
   Loader2,
   MoreHorizontal,
@@ -180,6 +181,15 @@ export default function StrategyInstancesPage() {
                           }
                         >
                           <Gauge className="size-4" /> paper 평가
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          render={
+                            <Link
+                              to={`/settings/instances/${row.id}/trade-history`}
+                            />
+                          }
+                        >
+                          <LineChart className="size-4" /> 매매 이력
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setDuplicateDialog(row)}
