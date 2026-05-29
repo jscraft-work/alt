@@ -137,13 +137,13 @@ export default function TradeHistoryPage() {
         description="paper_trade_match FIFO 매칭 row 의 페이지네이션/필터 조회. V17 비용 breakdown (slippage / 매도세 / 수수료 / actual) 포함."
         action={
           <>
-            <Button variant="outline" render={<Link to="/settings/instances" />}>
+            <Button variant="outline" render={<Link to="/strategy" />}>
               <ArrowLeft className="size-4" /> 인스턴스 목록
             </Button>
             <Button
               variant="outline"
               render={
-                <Link to={`/settings/instances/${instanceId}/paper-eval`} />
+                <Link to={`/strategy/${instanceId}/paper-eval`} />
               }
             >
               <Gauge className="size-4" /> paper 평가
@@ -151,7 +151,7 @@ export default function TradeHistoryPage() {
             <Button
               variant="outline"
               render={
-                <Link to={`/settings/instances/${instanceId}/watchlist`} />
+                <Link to={`/strategy/${instanceId}/watchlist`} />
               }
             >
               <Eye className="size-4" /> 감시 종목
@@ -160,7 +160,7 @@ export default function TradeHistoryPage() {
               variant="outline"
               render={
                 <Link
-                  to={`/settings/instances/${instanceId}/prompt-versions`}
+                  to={`/strategy/${instanceId}/prompt`}
                 />
               }
             >

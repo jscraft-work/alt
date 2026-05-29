@@ -74,25 +74,25 @@ export default function PromptVersionsPage() {
         description="전략 인스턴스별 프롬프트 이력을 조회하고, 새 버전을 추가하거나 이전 버전을 복원해 현재 버전으로 다시 적용합니다."
         action={
           <>
-            <Button variant="outline" render={<Link to="/settings/instances" />}>
+            <Button variant="outline" render={<Link to="/strategy" />}>
               <ArrowLeft className="size-4" /> 인스턴스 목록
             </Button>
             <Button
               variant="outline"
-              render={<Link to={`/settings/instances/${instanceId}/watchlist`} />}
+              render={<Link to={`/strategy/${instanceId}/watchlist`} />}
             >
               감시 종목
             </Button>
             <Button
               variant="outline"
-              render={<Link to={`/settings/instances/${instanceId}/paper-eval`} />}
+              render={<Link to={`/strategy/${instanceId}/paper-eval`} />}
             >
               <Gauge className="size-4" /> paper 평가
             </Button>
             <Button
               variant="outline"
               render={
-                <Link to={`/settings/instances/${instanceId}/trade-history`} />
+                <Link to={`/strategy/${instanceId}/trade-history`} />
               }
             >
               <LineChart className="size-4" /> 매매 이력

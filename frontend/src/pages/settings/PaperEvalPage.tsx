@@ -96,12 +96,12 @@ export default function PaperEvalPage() {
         description="직전 N건의 paper 매매 결과를 기반으로 EV/적중률/누적 PnL/비용 wall(실측 거래비용) 4지표를 표시합니다."
         action={
           <>
-            <Button variant="outline" render={<Link to="/settings/instances" />}>
+            <Button variant="outline" render={<Link to="/strategy" />}>
               <ArrowLeft className="size-4" /> 인스턴스 목록
             </Button>
             <Button
               variant="outline"
-              render={<Link to={`/settings/instances/${instanceId}/watchlist`} />}
+              render={<Link to={`/strategy/${instanceId}/watchlist`} />}
             >
               <Eye className="size-4" /> 감시 종목
             </Button>
@@ -109,7 +109,7 @@ export default function PaperEvalPage() {
               variant="outline"
               render={
                 <Link
-                  to={`/settings/instances/${instanceId}/prompt-versions`}
+                  to={`/strategy/${instanceId}/prompt`}
                 />
               }
             >
@@ -118,7 +118,7 @@ export default function PaperEvalPage() {
             <Button
               variant="outline"
               render={
-                <Link to={`/settings/instances/${instanceId}/trade-history`} />
+                <Link to={`/strategy/${instanceId}/trade-history`} />
               }
             >
               <LineChart className="size-4" /> 전체 매매 이력

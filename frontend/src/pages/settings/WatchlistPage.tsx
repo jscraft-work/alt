@@ -114,14 +114,14 @@ export default function WatchlistPage() {
         description="이 인스턴스가 매 사이클마다 평가할 종목 목록입니다."
         action={
           <>
-            <Button variant="outline" render={<Link to="/settings/instances" />}>
+            <Button variant="outline" render={<Link to="/strategy" />}>
               <ArrowLeft className="size-4" /> 인스턴스 목록
             </Button>
             <Button
               variant="outline"
               render={
                 <Link
-                  to={`/settings/instances/${instanceId}/prompt-versions`}
+                  to={`/strategy/${instanceId}/prompt`}
                 />
               }
             >
@@ -130,7 +130,7 @@ export default function WatchlistPage() {
             <Button
               variant="outline"
               render={
-                <Link to={`/settings/instances/${instanceId}/paper-eval`} />
+                <Link to={`/strategy/${instanceId}/paper-eval`} />
               }
             >
               <Gauge className="size-4" /> paper 평가
@@ -138,7 +138,7 @@ export default function WatchlistPage() {
             <Button
               variant="outline"
               render={
-                <Link to={`/settings/instances/${instanceId}/trade-history`} />
+                <Link to={`/strategy/${instanceId}/trade-history`} />
               }
             >
               <LineChart className="size-4" /> 매매 이력

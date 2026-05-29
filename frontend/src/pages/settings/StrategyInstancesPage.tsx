@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Briefcase,
   Copy,
+  Eye,
   Gauge,
   History,
+  LayoutDashboard,
   LineChart,
-  ListPlus,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -149,6 +151,13 @@ export default function StrategyInstancesPage() {
                       />
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
+                          render={
+                            <Link to={`/strategy/${row.id}/overview`} />
+                          }
+                        >
+                          <LayoutDashboard className="size-4" /> 개요
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           onClick={() =>
                             setEditDialog({ mode: "edit", instance: row })
                           }
@@ -158,7 +167,7 @@ export default function StrategyInstancesPage() {
                         <DropdownMenuItem
                           render={
                             <Link
-                              to={`/settings/instances/${row.id}/prompt-versions`}
+                              to={`/strategy/${row.id}/prompt`}
                             />
                           }
                         >
@@ -167,16 +176,16 @@ export default function StrategyInstancesPage() {
                         <DropdownMenuItem
                           render={
                             <Link
-                              to={`/settings/instances/${row.id}/watchlist`}
+                              to={`/strategy/${row.id}/watchlist`}
                             />
                           }
                         >
-                          <ListPlus className="size-4" /> 감시 종목
+                          <Eye className="size-4" /> 감시 종목
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           render={
                             <Link
-                              to={`/settings/instances/${row.id}/paper-eval`}
+                              to={`/strategy/${row.id}/paper-eval`}
                             />
                           }
                         >
@@ -185,11 +194,18 @@ export default function StrategyInstancesPage() {
                         <DropdownMenuItem
                           render={
                             <Link
-                              to={`/settings/instances/${row.id}/trade-history`}
+                              to={`/strategy/${row.id}/trade-history`}
                             />
                           }
                         >
                           <LineChart className="size-4" /> 매매 이력
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          render={
+                            <Link to={`/strategy/${row.id}/portfolio`} />
+                          }
+                        >
+                          <Briefcase className="size-4" /> 포트폴리오
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setDuplicateDialog(row)}

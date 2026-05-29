@@ -5,7 +5,7 @@ import {
   type ReactNode,
 } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import AppShell from "@/components/layout/AppShell";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { Toaster } from "@/components/ui/sonner";
@@ -14,17 +14,16 @@ import DashboardPage from "@/pages/DashboardPage";
 import { ensureCsrfToken } from "@/lib/api";
 
 /**
- * 라우트 구성 — docs/spec2.md §6.2.
+ * 라우트 구성 — F4 재구성 후.
  *
- * Phase 1 real:
- *  - `/login`
- *  - `/` 대시보드 (비로그인 허용)
+ * 글로벌 path (`/admin/*`):
+ *  - /admin/data-collection, /admin/asset-master, /admin/llm-models, /admin/system-parameters
+ *  - /admin/audit-log (신규), /admin/strategy-templates, /admin/broker-accounts
  *
- * Phase 1 stub (Phase 2에서 본 구현):
- *  - `/trades`, `/news`
+ * 전략별 path (`/strategy/*`):
+ *  - /strategy (인스턴스 목록), /strategy/:id/overview / paper-eval / trade-history / portfolio / trades / watchlist / prompt / settings
  *
- * 인증 필요:
- *  - `/settings` (RequireAuth → /login?next=/settings)
+ * 기존 `/settings/*` path 는 모두 신규 path 로 redirect (북마크 호환).
  */
 
 const queryClient = new QueryClient({
@@ -70,6 +69,13 @@ const AssetMasterPage = lazy(() => import("@/pages/settings/AssetMasterPage"));
 const SystemParametersPage = lazy(
   () => import("@/pages/settings/SystemParametersPage"),
 );
+const AuditLogPage = lazy(() => import("@/pages/admin/AuditLogPage"));
+const StrategyOverviewPage = lazy(
+  () => import("@/pages/strategy/StrategyOverviewPage"),
+);
+const StrategyPortfolioPage = lazy(
+  () => import("@/pages/strategy/StrategyPortfolioPage"),
+);
 
 function LazyRoute({ children }: { children: ReactNode }) {
   return (
@@ -87,9 +93,17 @@ function RouteLoadingFallback() {
   );
 }
 
+/**
+ * 기존 `/settings/instances/:id/<sub>` → `/strategy/:id/<sub>` redirect.
+ * sub 매핑은 F4 path 변경에 정합 — prompt-versions → prompt 등.
+ */
+function RedirectInstanceSubpath({ subpath }: { subpath: string }) {
+  const params = useParams();
+  return <Navigate to={`/strategy/${params.id}/${subpath}`} replace />;
+}
+
 export default function App() {
   // 앱 시작 시 CSRF 토큰을 한 번 발급받아 둔다.
-  // (docs/04-api-spec.md §3.4 + docs/06-auth-security.md §5)
   useEffect(() => {
     ensureCsrfToken().catch((error: unknown) => {
       console.error("[alt] CSRF 토큰 초기화 실패", error);
@@ -110,6 +124,7 @@ export default function App() {
               }
             />
             <Route element={<AppShell />}>
+              {/* ── 글로벌 (비인스턴스) ── */}
               <Route index element={<DashboardPage />} />
               <Route
                 path="trades"
@@ -135,96 +150,28 @@ export default function App() {
                   </LazyRoute>
                 }
               />
+
+              {/* ── /admin/* ── */}
               <Route
-                path="settings"
+                path="admin"
                 element={
                   <RequireAuth>
-                    <Navigate to="/settings/instances" replace />
+                    <Navigate to="/admin/data-collection" replace />
                   </RequireAuth>
                 }
               />
               <Route
-                path="settings/templates"
+                path="admin/data-collection"
                 element={
                   <RequireAuth>
                     <LazyRoute>
-                      <StrategyTemplatesPage />
+                      <DataCollectionPage />
                     </LazyRoute>
                   </RequireAuth>
                 }
               />
               <Route
-                path="settings/instances"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <StrategyInstancesPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="settings/instances/:id/prompt-versions"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <PromptVersionsPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="settings/instances/:id/watchlist"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <WatchlistPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="settings/instances/:id/paper-eval"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <PaperEvalPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="settings/instances/:id/trade-history"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <TradeHistoryPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="settings/models"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <ModelProfilesPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="settings/accounts"
-                element={
-                  <RequireAuth>
-                    <LazyRoute>
-                      <BrokerAccountsPage />
-                    </LazyRoute>
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="settings/assets"
+                path="admin/asset-master"
                 element={
                   <RequireAuth>
                     <LazyRoute>
@@ -234,7 +181,17 @@ export default function App() {
                 }
               />
               <Route
-                path="settings/system-parameters"
+                path="admin/llm-models"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <ModelProfilesPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="admin/system-parameters"
                 element={
                   <RequireAuth>
                     <LazyRoute>
@@ -244,15 +201,188 @@ export default function App() {
                 }
               />
               <Route
-                path="settings/data-collection"
+                path="admin/audit-log"
                 element={
                   <RequireAuth>
                     <LazyRoute>
-                      <DataCollectionPage />
+                      <AuditLogPage />
                     </LazyRoute>
                   </RequireAuth>
                 }
               />
+              <Route
+                path="admin/strategy-templates"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <StrategyTemplatesPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="admin/broker-accounts"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <BrokerAccountsPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+
+              {/* ── /strategy/* ── */}
+              <Route
+                path="strategy"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <StrategyInstancesPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="strategy/:id"
+                element={<Navigate to="overview" replace />}
+              />
+              <Route
+                path="strategy/:id/overview"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <StrategyOverviewPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="strategy/:id/paper-eval"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <PaperEvalPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="strategy/:id/trade-history"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <TradeHistoryPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="strategy/:id/portfolio"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <StrategyPortfolioPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="strategy/:id/trades"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <TradesPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="strategy/:id/watchlist"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <WatchlistPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="strategy/:id/prompt"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <PromptVersionsPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="strategy/:id/settings"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <StrategyInstancesPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+
+              {/* ── 기존 /settings/* path → 새 path redirect (북마크 호환) ── */}
+              <Route
+                path="settings"
+                element={<Navigate to="/strategy" replace />}
+              />
+              <Route
+                path="settings/instances"
+                element={<Navigate to="/strategy" replace />}
+              />
+              <Route
+                path="settings/templates"
+                element={
+                  <Navigate to="/admin/strategy-templates" replace />
+                }
+              />
+              <Route
+                path="settings/assets"
+                element={<Navigate to="/admin/asset-master" replace />}
+              />
+              <Route
+                path="settings/models"
+                element={<Navigate to="/admin/llm-models" replace />}
+              />
+              <Route
+                path="settings/accounts"
+                element={<Navigate to="/admin/broker-accounts" replace />}
+              />
+              <Route
+                path="settings/system-parameters"
+                element={
+                  <Navigate to="/admin/system-parameters" replace />
+                }
+              />
+              <Route
+                path="settings/data-collection"
+                element={<Navigate to="/admin/data-collection" replace />}
+              />
+              <Route
+                path="settings/instances/:id/prompt-versions"
+                element={<RedirectInstanceSubpath subpath="prompt" />}
+              />
+              <Route
+                path="settings/instances/:id/watchlist"
+                element={<RedirectInstanceSubpath subpath="watchlist" />}
+              />
+              <Route
+                path="settings/instances/:id/paper-eval"
+                element={<RedirectInstanceSubpath subpath="paper-eval" />}
+              />
+              <Route
+                path="settings/instances/:id/trade-history"
+                element={
+                  <RedirectInstanceSubpath subpath="trade-history" />
+                }
+              />
+
               <Route
                 path="*"
                 element={

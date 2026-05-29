@@ -853,6 +853,39 @@ export interface TradeHistoryResult {
   summary: TradeHistorySummaryView;
 }
 
+// ─────────── audit-log (F4) ───────────
+
+export interface AuditLogFilter {
+  page?: number;
+  size?: number;
+  from?: string | null;
+  to?: string | null;
+  targetType?: string | null;
+  actorType?: string | null;
+  actionType?: string | null;
+}
+
+export interface AuditLogRow {
+  id: string;
+  occurredAt: string;
+  actorType: string;
+  actorId: string | null;
+  targetType: string;
+  targetId: string | null;
+  actionType: string;
+  beforeJson: string | null;
+  afterJson: string | null;
+  summaryJson: string | null;
+}
+
+export interface AuditLogPageResult {
+  rows: AuditLogRow[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
 // ─────────── 시스템 파라미터 §8.21 ───────────
 
 export interface SystemParameter {

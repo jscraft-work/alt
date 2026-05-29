@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
+import { useRouteInstanceSync } from "@/hooks/use-route-instance-sync";
 
 /**
  * 사이드바 + 헤더 공통 셸 (docs/spec2.md §6.1).
@@ -11,6 +12,8 @@ import Sidebar from "./Sidebar";
  */
 export default function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // F4 — URL 의 `/strategy/{id}/...` 와 StrategyInstanceSelectionProvider 동기화
+  useRouteInstanceSync();
 
   return (
     <div className="flex min-h-screen bg-background">
