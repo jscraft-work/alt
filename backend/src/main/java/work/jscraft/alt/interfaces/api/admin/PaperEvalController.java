@@ -13,6 +13,7 @@ import work.jscraft.alt.common.dto.ApiDataResponse;
 import work.jscraft.alt.trading.application.ops.SetupMetricService;
 import work.jscraft.alt.trading.application.ops.SetupMetricService.DailyPnlPoint;
 import work.jscraft.alt.trading.application.ops.SetupMetricService.MetricSnapshot;
+import work.jscraft.alt.trading.application.ops.SetupMetricService.RecentMatchView;
 
 /**
  * 운영자 paper-eval API — 박스 단타 v1 인스턴스의 4 지표 + 시계열.
@@ -31,6 +32,8 @@ public class PaperEvalController {
 
     private static final int DEFAULT_LOOKBACK = 30;
     private static final int DEFAULT_SERIES_DAYS = 30;
+    private static final int DEFAULT_RECENT_MATCHES_LIMIT = 30;
+    private static final int MAX_RECENT_MATCHES_LIMIT = 200;
 
     private final SetupMetricService setupMetricService;
 
@@ -54,5 +57,15 @@ public class PaperEvalController {
         int effectiveDays = days != null && days > 0 ? days : DEFAULT_SERIES_DAYS;
         List<DailyPnlPoint> points = setupMetricService.computeDailySeries(instanceId, effectiveDays);
         return new ApiDataResponse<>(points);
+    }
+
+    @GetMapping("/{instanceId}/recent-matches")
+    public ApiDataResponse<List<RecentMatchView>> recentMatches(
+            @PathVariable UUID instanceId,
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        int requested = limit != null && limit > 0 ? limit : DEFAULT_RECENT_MATCHES_LIMIT;
+        int effectiveLimit = Math.min(requested, MAX_RECENT_MATCHES_LIMIT);
+        List<RecentMatchView> matches = setupMetricService.findRecentMatches(instanceId, effectiveLimit);
+        return new ApiDataResponse<>(matches);
     }
 }

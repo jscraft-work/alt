@@ -53,6 +53,7 @@ const PromptVersionsPage = lazy(
   () => import("@/pages/settings/PromptVersionsPage"),
 );
 const WatchlistPage = lazy(() => import("@/pages/settings/WatchlistPage"));
+const PaperEvalPage = lazy(() => import("@/pages/settings/PaperEvalPage"));
 const ModelProfilesPage = lazy(
   () => import("@/pages/settings/ModelProfilesPage"),
 );
@@ -172,6 +173,16 @@ export default function App() {
                   <RequireAuth>
                     <LazyRoute>
                       <WatchlistPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="settings/instances/:id/paper-eval"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <PaperEvalPage />
                     </LazyRoute>
                   </RequireAuth>
                 }

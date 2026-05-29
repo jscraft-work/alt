@@ -148,6 +148,38 @@ public class SetupMetricService {
     }
 
     /**
+     * 직전 {@code limit} 건 paper_trade_match 의 slim view — admin paper-eval 페이지 하단 표.
+     *
+     * <p>F3 trade-history(페이지네이션 + 필터) 와 별개. 여기는 단순 read-only "최근 N건".
+     */
+    @Transactional(readOnly = true)
+    public List<RecentMatchView> findRecentMatches(UUID strategyInstanceId, int limit) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("limit 은 양수여야 합니다: " + limit);
+        }
+        List<PaperTradeMatchEntity> matches = paperTradeMatchRepository
+                .findByStrategyInstance_IdOrderByExitTimeDesc(strategyInstanceId, Limit.of(limit));
+
+        List<RecentMatchView> result = new ArrayList<>(matches.size());
+        for (PaperTradeMatchEntity m : matches) {
+            result.add(new RecentMatchView(
+                    m.getId(),
+                    m.getSymbolCode(),
+                    m.getEntryTime(),
+                    m.getExitTime(),
+                    m.getHoldingMinutes(),
+                    m.getMatchedQuantity(),
+                    m.getGrossPnlPct(),
+                    m.getNetPnlPct(),
+                    m.getSlippageBuyPct(),
+                    m.getSlippageSellPct(),
+                    m.getSellTaxPct(),
+                    m.getFeePct()));
+        }
+        return result;
+    }
+
+    /**
      * 직전 {@code days} 일의 일별 net_pnl_pct 시계열 — 운영자 화면의 area chart 또는 curl /series 응답.
      * 일자 KST 기준. 매매 없는 일자는 0.
      */
@@ -221,5 +253,23 @@ public class SetupMetricService {
     public record DailyPnlPoint(
             LocalDate businessDate,
             BigDecimal netPnlPct) {
+    }
+
+    /**
+     * 직전 N 건 paper_trade_match 의 slim view — admin paper-eval 페이지 하단 표 노출용.
+     */
+    public record RecentMatchView(
+            UUID id,
+            String symbolCode,
+            OffsetDateTime entryTime,
+            OffsetDateTime exitTime,
+            int holdingMinutes,
+            BigDecimal matchedQuantity,
+            BigDecimal grossPnlPct,
+            BigDecimal netPnlPct,
+            BigDecimal slippageBuyPct,
+            BigDecimal slippageSellPct,
+            BigDecimal sellTaxPct,
+            BigDecimal feePct) {
     }
 }

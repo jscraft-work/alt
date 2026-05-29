@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Copy,
+  Gauge,
   History,
   ListPlus,
   Loader2,
@@ -170,6 +171,15 @@ export default function StrategyInstancesPage() {
                           }
                         >
                           <ListPlus className="size-4" /> 감시 종목
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          render={
+                            <Link
+                              to={`/settings/instances/${row.id}/paper-eval`}
+                            />
+                          }
+                        >
+                          <Gauge className="size-4" /> paper 평가
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setDuplicateDialog(row)}

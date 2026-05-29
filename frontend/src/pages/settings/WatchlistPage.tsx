@@ -1,6 +1,15 @@
 import { useDeferredValue, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Gauge,
+  History,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,9 +112,29 @@ export default function WatchlistPage() {
         title={`감시 종목${instance ? ` · ${instance.name}` : ""}`}
         description="이 인스턴스가 매 사이클마다 평가할 종목 목록입니다."
         action={
-          <Button variant="outline" render={<Link to="/settings/instances" />}>
-            <ArrowLeft className="size-4" /> 인스턴스 목록
-          </Button>
+          <>
+            <Button variant="outline" render={<Link to="/settings/instances" />}>
+              <ArrowLeft className="size-4" /> 인스턴스 목록
+            </Button>
+            <Button
+              variant="outline"
+              render={
+                <Link
+                  to={`/settings/instances/${instanceId}/prompt-versions`}
+                />
+              }
+            >
+              <History className="size-4" /> 프롬프트 버전
+            </Button>
+            <Button
+              variant="outline"
+              render={
+                <Link to={`/settings/instances/${instanceId}/paper-eval`} />
+              }
+            >
+              <Gauge className="size-4" /> paper 평가
+            </Button>
+          </>
         }
       />
 

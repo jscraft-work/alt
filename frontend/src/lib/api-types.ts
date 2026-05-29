@@ -614,6 +614,64 @@ export interface DartCorpCodeLookupResult {
   hidden: boolean;
 }
 
+// ─────────── paper 평가 (paper-eval) — 박스 단타 v1 정직성 보강 ───────────
+
+/**
+ * 백엔드 응답의 비율(BigDecimal) 값. Jackson 기본 직렬화는 number 지만,
+ * BigDecimal 정밀도를 보존하려고 string 으로 내릴 경우도 대비해 둘 다 허용한다.
+ *
+ * 본 프로젝트 ObjectMapper 기본 설정에서는 number 로 직렬화된다.
+ */
+export type ApiDecimal = number | string;
+
+export interface PaperEvalMetricSnapshot {
+  tradesCount: number;
+  wins: number;
+  losses: number;
+  /** 0~1 범위 (예: 0.5333 = 53.33%) */
+  hitRate: ApiDecimal;
+  /** % 단위 (예: 0.0123 = +1.23%) — net_pnl_pct 합 */
+  sumProfitPct: ApiDecimal;
+  /** % 단위 (음수) — net_pnl_pct 합 */
+  sumLossPct: ApiDecimal;
+  /** % 단위 — 평균 net_pnl_pct */
+  ev: ApiDecimal;
+  /** Profit Factor. 손실 없으면 null */
+  pf: ApiDecimal | null;
+  /** % 단위 — 누적 net_pnl_pct 의 max drawdown */
+  mdd: ApiDecimal;
+  /** % 단위. signed (음수면 운 좋음). 매치 없으면 null */
+  avgSlippageBuyPct: ApiDecimal | null;
+  avgSlippageSellPct: ApiDecimal | null;
+  avgSellTaxPct: ApiDecimal | null;
+  avgFeePct: ApiDecimal | null;
+  /** % 단위 — |slip_buy| + |slip_sell| + sell_tax + fee 의 평균 합 */
+  avgCostTotalPct: ApiDecimal;
+}
+
+export interface PaperEvalDailyPoint {
+  /** ISO `YYYY-MM-DD` (KST 기준) */
+  businessDate: string;
+  /** 해당 일 매매 net_pnl_pct 합 */
+  netPnlPct: ApiDecimal;
+}
+
+export interface PaperEvalRecentMatch {
+  id: string;
+  symbolCode: string;
+  /** ISO-8601 with offset */
+  entryTime: string;
+  exitTime: string;
+  holdingMinutes: number;
+  matchedQuantity: ApiDecimal;
+  grossPnlPct: ApiDecimal;
+  netPnlPct: ApiDecimal;
+  slippageBuyPct: ApiDecimal | null;
+  slippageSellPct: ApiDecimal | null;
+  sellTaxPct: ApiDecimal | null;
+  feePct: ApiDecimal | null;
+}
+
 // ─────────── 시스템 파라미터 §8.21 ───────────
 
 export interface SystemParameter {
