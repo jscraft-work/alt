@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import work.jscraft.alt.collector.application.MarketDataOpsEventRecorder;
+import work.jscraft.alt.collector.application.marketdata.WebSocketStatusTracker;
+import work.jscraft.alt.collector.application.marketdata.WsAdhocSubscriptionStore;
 import work.jscraft.alt.collector.application.marketdata.WsSubscriptionReconciler;
 import work.jscraft.alt.integrations.kis.websocket.KisWebSocketClient;
 import work.jscraft.alt.marketdata.infrastructure.persistence.AssetMasterEntity;
@@ -34,6 +36,8 @@ class WsSubscriptionReconcilerTest {
     private StrategyInstanceWatchlistRelationRepository watchlistRepository;
     private KisWebSocketClient kisWebSocketClient;
     private MarketDataOpsEventRecorder opsEventRecorder;
+    private WsAdhocSubscriptionStore adhocStore;
+    private WebSocketStatusTracker statusTracker;
     private WsSubscriptionReconciler reconciler;
 
     @BeforeEach
@@ -42,8 +46,13 @@ class WsSubscriptionReconcilerTest {
         watchlistRepository = mock(StrategyInstanceWatchlistRelationRepository.class);
         kisWebSocketClient = mock(KisWebSocketClient.class);
         opsEventRecorder = mock(MarketDataOpsEventRecorder.class);
+        adhocStore = mock(WsAdhocSubscriptionStore.class);
+        statusTracker = mock(WebSocketStatusTracker.class);
+        // 기본: ad-hoc 코드 없음. 개별 테스트가 필요 시 stub 덮어쓰기.
+        when(adhocStore.all()).thenReturn(Set.of());
         reconciler = new WsSubscriptionReconciler(
-                instanceRepository, watchlistRepository, kisWebSocketClient, opsEventRecorder);
+                instanceRepository, watchlistRepository, kisWebSocketClient, opsEventRecorder,
+                adhocStore, statusTracker);
     }
 
     @Test

@@ -672,6 +672,113 @@ export interface PaperEvalRecentMatch {
   feePct: ApiDecimal | null;
 }
 
+// ─────────── data-collection 관리 — F2 ───────────
+
+/**
+ * 백엔드 CollectionDashboardService.OpsEventView 매핑.
+ * - statusCode: "ok" | "down" | "limit_exceeded" (그 외 string 도 가능)
+ */
+export interface OpsEventView {
+  id: string;
+  /** ISO-8601 */
+  occurredAt: string;
+  serviceName: string;
+  eventType: string;
+  /** 잘 알려진 값: "ok" | "down" | "limit_exceeded" */
+  statusCode: string;
+  message: string | null;
+  /** 백엔드가 JsonNode.toString() 으로 직렬화. null 가능 */
+  payloadJson: string | null;
+}
+
+/** 통합 상태 — frontend 가 색상 매핑에 사용 */
+export type DataCollectionStatus =
+  | "ok"
+  | "delayed"
+  | "down"
+  | "unknown"
+  | (string & {});
+
+export interface DataCollectionWsSection {
+  status: DataCollectionStatus;
+  /** WebSocketStatusTracker.WebSocketState.name() */
+  connectionState: "CONNECTED" | "DELAYED" | "DISCONNECTED" | "UNKNOWN" | (string & {});
+  lastTickAt: string | null;
+  lastConnectedAt: string | null;
+  lastDisconnectedAt: string | null;
+  subscribedCount: number;
+  maxSubscriptions: number;
+  adhocCount: number;
+  count24hOk: number;
+  count24hDown: number;
+  count24hLimitExceeded: number;
+  latestEvent: OpsEventView | null;
+}
+
+export interface DataCollectionRestSection {
+  status: DataCollectionStatus;
+  lastSnapshotAt: string | null;
+  lastMinuteBarAt: string | null;
+}
+
+export interface DataCollectionContentSection {
+  status: DataCollectionStatus;
+  lastNewsAt: string | null;
+  lastDisclosureAt: string | null;
+  newsCount24hOk: number;
+  newsCount24hDown: number;
+  disclosureCount24hOk: number;
+  disclosureCount24hDown: number;
+  latestEvent: OpsEventView | null;
+}
+
+export interface DataCollectionMacroSection {
+  status: DataCollectionStatus;
+  /** ISO `YYYY-MM-DD` */
+  lastBaseDate: string | null;
+  count24hOk: number;
+  count24hDown: number;
+  latestEvent: OpsEventView | null;
+}
+
+export interface DataCollectionSummary {
+  evaluatedAt: string;
+  ws: DataCollectionWsSection;
+  rest: DataCollectionRestSection;
+  content: DataCollectionContentSection;
+  macro: DataCollectionMacroSection;
+}
+
+export interface WsSubscriptionRow {
+  symbolCode: string;
+  /** "watchlist" | "adhoc" | "adhoc_pending" */
+  source: "watchlist" | "adhoc" | "adhoc_pending" | (string & {});
+}
+
+export interface WsSubscriptionList {
+  rows: WsSubscriptionRow[];
+  totalCount: number;
+  maxSubscriptions: number;
+  connectionState: string;
+  lastTickAt: string | null;
+}
+
+export interface WsSubscribeRequest {
+  symbolCodes: string[];
+}
+
+export interface WsSubscribeResponse {
+  addedCount: number;
+  requestedCount: number;
+}
+
+export interface WsUnsubscribeResponse {
+  removed: boolean;
+  symbolCode: string;
+}
+
+export type OpsEventService = "marketdata" | "news" | "disclosure" | "macro";
+
 // ─────────── 시스템 파라미터 §8.21 ───────────
 
 export interface SystemParameter {

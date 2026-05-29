@@ -47,16 +47,22 @@ public class WsSubscriptionReconciler {
     private final StrategyInstanceWatchlistRelationRepository watchlistRelationRepository;
     private final KisWebSocketClient kisWebSocketClient;
     private final MarketDataOpsEventRecorder opsEventRecorder;
+    private final WsAdhocSubscriptionStore adhocSubscriptionStore;
+    private final WebSocketStatusTracker statusTracker;
 
     public WsSubscriptionReconciler(
             StrategyInstanceRepository strategyInstanceRepository,
             StrategyInstanceWatchlistRelationRepository watchlistRelationRepository,
             KisWebSocketClient kisWebSocketClient,
-            MarketDataOpsEventRecorder opsEventRecorder) {
+            MarketDataOpsEventRecorder opsEventRecorder,
+            WsAdhocSubscriptionStore adhocSubscriptionStore,
+            WebSocketStatusTracker statusTracker) {
         this.strategyInstanceRepository = strategyInstanceRepository;
         this.watchlistRelationRepository = watchlistRelationRepository;
         this.kisWebSocketClient = kisWebSocketClient;
         this.opsEventRecorder = opsEventRecorder;
+        this.adhocSubscriptionStore = adhocSubscriptionStore;
+        this.statusTracker = statusTracker;
     }
 
     @Scheduled(
@@ -109,6 +115,9 @@ public class WsSubscriptionReconciler {
                 MarketDataOpsEventRecorder.SERVICE_MARKETDATA,
                 EVENT_TYPE_RECONCILE,
                 null);
+
+        // 매 cycle 끝에 web-app 의 admin 대시보드가 읽도록 현재 구독 코드 set 을 Redis 에 publish.
+        statusTracker.recordSubscribedCodes(kisWebSocketClient.subscribedCodes());
     }
 
     private Set<String> collectDesiredSymbols() {
@@ -126,6 +135,8 @@ public class WsSubscriptionReconciler {
                 symbols.add(relation.getAssetMaster().getSymbolCode());
             }
         }
+        // 운영자가 admin UI 에서 명시적으로 추가한 ad-hoc 코드 union.
+        symbols.addAll(adhocSubscriptionStore.all());
         return symbols;
     }
 

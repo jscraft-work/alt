@@ -17,6 +17,7 @@ import {
   Settings,
   SlidersHorizontal,
   ServerCog,
+  Wifi,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
 const SETTINGS_CHILDREN = [
   { to: "/settings/instances", label: "전략 인스턴스", icon: ServerCog },
   { to: "/settings/templates", label: "전략 템플릿", icon: Folders },
+  { to: "/settings/data-collection", label: "데이터 수집", icon: Wifi },
   { to: "/settings/assets", label: "자산 마스터", icon: Database },
   { to: "/settings/models", label: "모델 프로필", icon: Cpu },
   { to: "/settings/accounts", label: "브로커 계좌", icon: Briefcase },

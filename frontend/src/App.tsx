@@ -54,6 +54,9 @@ const PromptVersionsPage = lazy(
 );
 const WatchlistPage = lazy(() => import("@/pages/settings/WatchlistPage"));
 const PaperEvalPage = lazy(() => import("@/pages/settings/PaperEvalPage"));
+const DataCollectionPage = lazy(
+  () => import("@/pages/settings/DataCollectionPage"),
+);
 const ModelProfilesPage = lazy(
   () => import("@/pages/settings/ModelProfilesPage"),
 );
@@ -223,6 +226,16 @@ export default function App() {
                   <RequireAuth>
                     <LazyRoute>
                       <SystemParametersPage />
+                    </LazyRoute>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="settings/data-collection"
+                element={
+                  <RequireAuth>
+                    <LazyRoute>
+                      <DataCollectionPage />
                     </LazyRoute>
                   </RequireAuth>
                 }
