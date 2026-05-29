@@ -35,7 +35,7 @@ class TradingSchemaFlywayTest {
                     .locations("classpath:db/migration")
                     .load();
 
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(16);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(18);
 
             try (Connection connection = DriverManager.getConnection(
                     jdbcUrl(databaseName),
@@ -44,7 +44,7 @@ class TradingSchemaFlywayTest {
                  Statement statement = connection.createStatement()) {
 
                 assertThat(singleInt(statement, "select count(*) from flyway_schema_history where success = true"))
-                        .isEqualTo(16);
+                        .isEqualTo(18);
                 assertThat(regclass(statement, "strategy_instance")).isEqualTo("strategy_instance");
                 assertThat(regclass(statement, "strategy_instance_prompt_version"))
                         .isEqualTo("strategy_instance_prompt_version");
@@ -68,6 +68,25 @@ class TradingSchemaFlywayTest {
                 assertThat(regclass(statement, "scheduled_tasks")).isEqualTo("scheduled_tasks");
                 assertThat(columnExists(statement, "portfolio_position", "last_mark_price")).isFalse();
                 assertThat(columnExists(statement, "portfolio_position", "unrealized_pnl")).isFalse();
+
+                // V17: trade_order paper 비용 breakdown 9 컬럼
+                assertThat(columnExists(statement, "trade_order", "paper_requested_amount")).isTrue();
+                assertThat(columnExists(statement, "trade_order", "paper_slippage_amount")).isTrue();
+                assertThat(columnExists(statement, "trade_order", "paper_sell_tax_amount")).isTrue();
+                assertThat(columnExists(statement, "trade_order", "paper_commission_amount")).isTrue();
+                assertThat(columnExists(statement, "trade_order", "paper_actual_amount")).isTrue();
+                assertThat(columnExists(statement, "trade_order", "paper_walk_levels")).isTrue();
+                assertThat(columnExists(statement, "trade_order", "paper_partial_fill_ratio")).isTrue();
+                assertThat(columnExists(statement, "trade_order", "paper_orderbook_snapshot_json")).isTrue();
+                assertThat(columnExists(statement, "trade_order", "unfilled_quantity")).isTrue();
+
+                // V18: paper_trade_match 신규 테이블
+                assertThat(regclass(statement, "paper_trade_match")).isEqualTo("paper_trade_match");
+                assertThat(columnExists(statement, "paper_trade_match", "buy_trade_order_id")).isTrue();
+                assertThat(columnExists(statement, "paper_trade_match", "sell_trade_order_id")).isTrue();
+                assertThat(columnExists(statement, "paper_trade_match", "matched_quantity")).isTrue();
+                assertThat(columnExists(statement, "paper_trade_match", "gross_pnl_pct")).isTrue();
+                assertThat(columnExists(statement, "paper_trade_match", "net_pnl_pct")).isTrue();
             }
         } finally {
             dropDatabase(databaseName);

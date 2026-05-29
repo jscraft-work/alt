@@ -77,6 +77,43 @@ public class TradeOrderEntity extends CreatedAtOnlyUuidEntity {
     @Column(name = "portfolio_after_json", columnDefinition = "jsonb")
     private JsonNode portfolioAfterJson;
 
+    // ----- V17: paper 비용 breakdown (amount 기반) -----
+    // invariant (PaperOrderExecutor 에서 enforce):
+    //   BUY:  paperActualAmount = paperRequestedAmount + paperSlippageAmount + paperCommissionAmount
+    //   SELL: paperActualAmount = paperRequestedAmount - paperSlippageAmount
+    //                            - paperSellTaxAmount - paperCommissionAmount
+    //   portfolio.cash 변동 절대값 = paperActualAmount
+
+    @Column(name = "paper_requested_amount", precision = 19, scale = 4)
+    private BigDecimal paperRequestedAmount;
+
+    @Column(name = "paper_slippage_amount", precision = 19, scale = 4)
+    private BigDecimal paperSlippageAmount;
+
+    @Column(name = "paper_sell_tax_amount", precision = 19, scale = 4)
+    private BigDecimal paperSellTaxAmount;
+
+    @Column(name = "paper_commission_amount", precision = 19, scale = 4)
+    private BigDecimal paperCommissionAmount;
+
+    @Column(name = "paper_actual_amount", precision = 19, scale = 4)
+    private BigDecimal paperActualAmount;
+
+    // ----- V17: 호가 walk 결과 -----
+
+    @Column(name = "paper_walk_levels")
+    private Short paperWalkLevels;
+
+    @Column(name = "paper_partial_fill_ratio", precision = 6, scale = 4)
+    private BigDecimal paperPartialFillRatio;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "paper_orderbook_snapshot_json", columnDefinition = "jsonb")
+    private JsonNode paperOrderbookSnapshotJson;
+
+    @Column(name = "unfilled_quantity", precision = 19, scale = 8)
+    private BigDecimal unfilledQuantity;
+
     public TradeOrderIntentEntity getTradeOrderIntent() {
         return tradeOrderIntent;
     }
@@ -211,5 +248,77 @@ public class TradeOrderEntity extends CreatedAtOnlyUuidEntity {
 
     public void setPortfolioAfterJson(JsonNode portfolioAfterJson) {
         this.portfolioAfterJson = portfolioAfterJson;
+    }
+
+    public BigDecimal getPaperRequestedAmount() {
+        return paperRequestedAmount;
+    }
+
+    public void setPaperRequestedAmount(BigDecimal paperRequestedAmount) {
+        this.paperRequestedAmount = paperRequestedAmount;
+    }
+
+    public BigDecimal getPaperSlippageAmount() {
+        return paperSlippageAmount;
+    }
+
+    public void setPaperSlippageAmount(BigDecimal paperSlippageAmount) {
+        this.paperSlippageAmount = paperSlippageAmount;
+    }
+
+    public BigDecimal getPaperSellTaxAmount() {
+        return paperSellTaxAmount;
+    }
+
+    public void setPaperSellTaxAmount(BigDecimal paperSellTaxAmount) {
+        this.paperSellTaxAmount = paperSellTaxAmount;
+    }
+
+    public BigDecimal getPaperCommissionAmount() {
+        return paperCommissionAmount;
+    }
+
+    public void setPaperCommissionAmount(BigDecimal paperCommissionAmount) {
+        this.paperCommissionAmount = paperCommissionAmount;
+    }
+
+    public BigDecimal getPaperActualAmount() {
+        return paperActualAmount;
+    }
+
+    public void setPaperActualAmount(BigDecimal paperActualAmount) {
+        this.paperActualAmount = paperActualAmount;
+    }
+
+    public Short getPaperWalkLevels() {
+        return paperWalkLevels;
+    }
+
+    public void setPaperWalkLevels(Short paperWalkLevels) {
+        this.paperWalkLevels = paperWalkLevels;
+    }
+
+    public BigDecimal getPaperPartialFillRatio() {
+        return paperPartialFillRatio;
+    }
+
+    public void setPaperPartialFillRatio(BigDecimal paperPartialFillRatio) {
+        this.paperPartialFillRatio = paperPartialFillRatio;
+    }
+
+    public JsonNode getPaperOrderbookSnapshotJson() {
+        return paperOrderbookSnapshotJson;
+    }
+
+    public void setPaperOrderbookSnapshotJson(JsonNode paperOrderbookSnapshotJson) {
+        this.paperOrderbookSnapshotJson = paperOrderbookSnapshotJson;
+    }
+
+    public BigDecimal getUnfilledQuantity() {
+        return unfilledQuantity;
+    }
+
+    public void setUnfilledQuantity(BigDecimal unfilledQuantity) {
+        this.unfilledQuantity = unfilledQuantity;
     }
 }
