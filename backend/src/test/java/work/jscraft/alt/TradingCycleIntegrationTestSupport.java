@@ -1,14 +1,64 @@
 package work.jscraft.alt;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.List;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import org.springframework.beans.factory.annotation.Autowired;
+
+import work.jscraft.alt.collector.application.marketdata.OrderBookRedisCache;
 import work.jscraft.alt.llm.infrastructure.persistence.LlmModelProfileEntity;
+import work.jscraft.alt.marketdata.application.MarketDataSnapshots.OrderBookSnapshot;
 import work.jscraft.alt.strategy.infrastructure.persistence.BrokerAccountEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstancePromptVersionEntity;
 import work.jscraft.alt.strategy.infrastructure.persistence.StrategyTemplateEntity;
 
 abstract class TradingCycleIntegrationTestSupport extends CollectorIntegrationTestSupport {
+
+    @Autowired
+    protected OrderBookRedisCache orderBookRedisCache;
+
+    @Autowired
+    protected ObjectMapper objectMapper;
+
+    /**
+     * KIS WS push schema 형식의 호가 5 단계를 Redis 에 seed.
+     *
+     * <p>{@link PaperOrderExecutor} 의 walker 가 {@link OrderBookRedisCache#read} 로 읽어 호가 walk
+     * + 한 틱 양보 시뮬에 사용한다. paper E2E 가 walker 동작 의존하므로 setup 에 반드시 호출.
+     *
+     * <p>{@code askPrices[0]} = 매도 1 단계 (= ask1, 가장 낮은 매도호가, BUY 의 즉시 체결가).
+     * {@code bidPrices[0]} = 매수 1 단계 (= bid1, 가장 높은 매수호가, SELL 의 즉시 체결가).
+     */
+    protected void seedOrderbook(
+            String symbolCode,
+            List<Long> askPrices,
+            List<Long> askVolumes,
+            List<Long> bidPrices,
+            List<Long> bidVolumes) {
+        ObjectNode payload = objectMapper.createObjectNode();
+        ArrayNode ap = payload.putArray("ask_prices");
+        askPrices.forEach(ap::add);
+        ArrayNode bp = payload.putArray("bid_prices");
+        bidPrices.forEach(bp::add);
+        ArrayNode av = payload.putArray("ask_volumes");
+        askVolumes.forEach(av::add);
+        ArrayNode bv = payload.putArray("bid_volumes");
+        bidVolumes.forEach(bv::add);
+
+        OrderBookSnapshot snapshot = new OrderBookSnapshot(
+                symbolCode,
+                OffsetDateTime.now(mutableClock),
+                payload,
+                "kis-ws");
+        orderBookRedisCache.store(snapshot);
+    }
+
 
     /**
      * 최소 유효 prompt: 사이클이 {@code PromptInputSpecParser → PromptContextAssembler → PromptTemplateEngine}을

@@ -45,6 +45,13 @@ class PaperOrderLinkageTest extends TradingCycleIntegrationTestSupport {
     void decisionLogIntentAndOrderAreFullyLinked() {
         StrategyInstanceEntity instance = createActiveInstance("KR 모멘텀 A", "paper");
         seedPortfolio(instance, new BigDecimal("3000000.0000"));
+        // M1 PaperOrderExecutor 가 호가 walk 시뮬레이션을 위해 OrderBookRedisCache 를 읽음.
+        // 80,000~81,000 원 5 단계 호가 + 잔량 충분.
+        seedOrderbook("005930",
+                java.util.List.of(80_000L, 80_100L, 80_200L, 80_300L, 80_400L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L),
+                java.util.List.of(79_900L, 79_800L, 79_700L, 79_600L, 79_500L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L));
 
         fakeTradingDecisionEngine.primeSuccess("""
                 {
@@ -89,6 +96,14 @@ class PaperOrderLinkageTest extends TradingCycleIntegrationTestSupport {
                         instance.getId(),
                         org.springframework.data.domain.Limit.of(10));
         assertThat(ordersByInstance).hasSize(2);
+
+        // V17 paper 비용 breakdown — 각 row 가 양수 actual amount + walk_levels 적재되어 있어야 함
+        for (TradeOrderEntity order : ordersByInstance) {
+            assertThat(order.getPaperActualAmount()).isNotNull().isGreaterThan(BigDecimal.ZERO);
+            assertThat(order.getPaperRequestedAmount()).isNotNull().isGreaterThan(BigDecimal.ZERO);
+            assertThat(order.getPaperWalkLevels()).isNotNull().isGreaterThanOrEqualTo((short) 1);
+            assertThat(order.getPaperOrderbookSnapshotJson()).isNotNull();
+        }
     }
 
     private void seedPortfolio(StrategyInstanceEntity instance, BigDecimal cash) {

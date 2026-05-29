@@ -81,6 +81,13 @@ class PaperTradingCycleE2ETest extends TradingCycleIntegrationTestSupport {
         AssetMasterEntity samsung = createAsset("005930", "삼성전자", null);
         addWatchlist(instance, samsung);
         seedPortfolio(instance, new BigDecimal("5000000.0000"));
+        // M1 PaperOrderExecutor 의 walker 가 호가 walk 시뮬에 사용. ask 1 단계 80,000 (충분 잔량) → 한 틱 양보 +100
+        // 이후 avgFilledPrice = 80,100, paperActualAmount = grossFill + commission.
+        seedOrderbook("005930",
+                java.util.List.of(80_000L, 80_100L, 80_200L, 80_300L, 80_400L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L),
+                java.util.List.of(79_900L, 79_800L, 79_700L, 79_600L, 79_500L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L));
 
         fakeTradingDecisionEngine.primeSuccess("""
                 {
@@ -118,13 +125,26 @@ class PaperTradingCycleE2ETest extends TradingCycleIntegrationTestSupport {
         assertThat(orders).hasSize(1);
         TradeOrderEntity order = orders.get(0);
         assertThat(order.getOrderStatus()).isEqualTo("filled");
-        assertThat(order.getAvgFilledPrice()).isEqualByComparingTo("80000");
+        // M1: walker avgBefore=80,000 + 한 틱 100 = 80,100 (KOSPI 100 원 tick 구간)
+        assertThat(order.getAvgFilledPrice()).isEqualByComparingTo("80100");
         assertThat(order.getTradeOrderIntent().getId()).isEqualTo(intent.getId());
         assertThat(order.getPortfolioAfterJson()).isNotNull();
+        // V17 paper 비용 breakdown
+        // grossFill = 80,100 × 5 = 400,500
+        // commission = 0.00014 × 400,500 = 56.07
+        // paperActual = 400,500 + 56.07 = 400,556.07
+        assertThat(order.getPaperRequestedAmount()).isEqualByComparingTo("400000.0000");   // 80,000 LIMIT × 5
+        assertThat(order.getPaperSlippageAmount()).isEqualByComparingTo("500.0000");       // |80100-80000| × 5
+        assertThat(order.getPaperSellTaxAmount()).isEqualByComparingTo("0.0000");          // BUY
+        assertThat(order.getPaperCommissionAmount()).isEqualByComparingTo("56.0700");
+        assertThat(order.getPaperActualAmount()).isEqualByComparingTo("400556.0700");
+        assertThat(order.getPaperWalkLevels()).isEqualTo((short) 1);
+        assertThat(order.getPaperPartialFillRatio()).isEqualByComparingTo("1.0000");
+        assertThat(order.getUnfilledQuantity()).isEqualByComparingTo("0");
 
         PortfolioEntity portfolio = portfolioRepository.findByStrategyInstanceId(instance.getId()).orElseThrow();
-        // cash = 5,000,000 - 5*80000 = 4,600,000
-        assertThat(portfolio.getCashAmount()).isEqualByComparingTo("4600000.0000");
+        // cash = 5,000,000 - paperActualAmount (400,556.07) = 4,599,443.93
+        assertThat(portfolio.getCashAmount()).isEqualByComparingTo("4599443.9300");
         assertThat(portfolioPositionRepository.findByStrategyInstanceIdAndSymbolCode(instance.getId(), "005930")
                 .orElseThrow()
                 .getQuantity()).isEqualByComparingTo("5");
