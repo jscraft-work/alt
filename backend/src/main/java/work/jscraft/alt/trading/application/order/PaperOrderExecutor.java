@@ -130,7 +130,8 @@ public class PaperOrderExecutor {
 
             BigDecimal paperRequestedAmount = requestedPrice.multiply(filledQuantity)
                     .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
-            BigDecimal paperSlippageAmount = avgFilledPrice.subtract(requestedPrice).abs()
+            // signed: BUY 양수 = 비싸게 잡힘 (불리), SELL 양수 = 비싸게 팔림 (운 좋음).
+            BigDecimal paperSlippageAmount = avgFilledPrice.subtract(requestedPrice)
                     .multiply(filledQuantity)
                     .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
             BigDecimal paperSellTaxAmount = SIDE_SELL.equals(side)
@@ -139,17 +140,31 @@ public class PaperOrderExecutor {
             BigDecimal paperCommissionAmount = grossFillAmount.multiply(COMMISSION_RATE)
                     .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
 
+            // paper_actual_amount = cash 변동 절대값 — grossFill (= avg × qty) 기반 직접 계산
             BigDecimal paperActualAmount;
             if (SIDE_BUY.equals(side)) {
-                // avgFilledPrice 가 requestedPrice 보다 낮은 (negative slippage) 케이스 — 운영자 row 보고서 직관:
-                // 매수자 입장 negative slippage 는 cashOut 감소 (이득). actual = (avg × qty) + commission.
-                // 즉 직관적: paperActualAmount = grossFillAmount + commission (BUY 는 매도세 0).
                 paperActualAmount = grossFillAmount.add(paperCommissionAmount)
                         .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
             } else {
-                // SELL: actual = grossFill - 매도세 - commission.
                 paperActualAmount = grossFillAmount.subtract(paperSellTaxAmount).subtract(paperCommissionAmount)
                         .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+            }
+
+            // invariant self-check — signed slippage 정의 하에서 식이 항상 정합
+            //   BUY:  actual = requested + slippage + commission
+            //   SELL: actual = requested + slippage - sell_tax - commission
+            BigDecimal expectedFromFormula = SIDE_BUY.equals(side)
+                    ? paperRequestedAmount.add(paperSlippageAmount).add(paperCommissionAmount)
+                            .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP)
+                    : paperRequestedAmount.add(paperSlippageAmount)
+                            .subtract(paperSellTaxAmount).subtract(paperCommissionAmount)
+                            .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+            if (expectedFromFormula.compareTo(paperActualAmount) != 0) {
+                throw new IllegalStateException(
+                        "paper 비용 invariant 위반: intent=" + intent.getId()
+                                + " side=" + side
+                                + " expected=" + expectedFromFormula
+                                + " actual=" + paperActualAmount);
             }
 
             PortfolioSnapshot snapshot;
