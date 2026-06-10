@@ -9,6 +9,7 @@ import java.util.Map;
 import work.jscraft.alt.marketdata.application.MarketDataException;
 import work.jscraft.alt.marketdata.application.MarketDataGateway;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.FundamentalSnapshot;
+import work.jscraft.alt.marketdata.application.MarketDataSnapshots.InvestorFlowSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.MinuteBar;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.OrderBookSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.PriceSnapshot;
@@ -20,6 +21,7 @@ class FakeMarketDataGateway implements MarketDataGateway {
     private final Map<String, List<MinuteBar>> minuteBarResponses = new HashMap<>();
     private final Map<String, MarketDataException> minuteBarFailures = new HashMap<>();
     private final Map<String, OrderBookSnapshot> orderBookResponses = new HashMap<>();
+    private final Map<String, InvestorFlowSnapshot> investorFlowResponses = new HashMap<>();
 
     void resetAll() {
         priceResponses.clear();
@@ -27,6 +29,7 @@ class FakeMarketDataGateway implements MarketDataGateway {
         minuteBarResponses.clear();
         minuteBarFailures.clear();
         orderBookResponses.clear();
+        investorFlowResponses.clear();
     }
 
     void primePrice(String symbolCode, PriceSnapshot snapshot) {
@@ -51,6 +54,10 @@ class FakeMarketDataGateway implements MarketDataGateway {
 
     void primeOrderBook(String symbolCode, OrderBookSnapshot snapshot) {
         orderBookResponses.put(symbolCode, snapshot);
+    }
+
+    void primeInvestorFlow(String symbolCode, InvestorFlowSnapshot snapshot) {
+        investorFlowResponses.put(symbolCode, snapshot);
     }
 
     @Override
@@ -94,5 +101,15 @@ class FakeMarketDataGateway implements MarketDataGateway {
     public FundamentalSnapshot fetchFundamental(String symbolCode) {
         throw new MarketDataException(MarketDataException.Category.EMPTY_RESPONSE, "fake",
                 "no fake fundamental for " + symbolCode);
+    }
+
+    @Override
+    public InvestorFlowSnapshot fetchInvestorFlow(String symbolCode) {
+        InvestorFlowSnapshot snapshot = investorFlowResponses.get(symbolCode);
+        if (snapshot == null) {
+            throw new MarketDataException(MarketDataException.Category.EMPTY_RESPONSE, "fake",
+                    "no fake investor flow for " + symbolCode);
+        }
+        return snapshot;
     }
 }

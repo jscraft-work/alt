@@ -43,6 +43,8 @@ import work.jscraft.alt.marketdata.application.MarketDataException;
 import work.jscraft.alt.marketdata.application.MarketDataException.Category;
 import work.jscraft.alt.marketdata.application.MarketDataGateway;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.FundamentalSnapshot;
+import work.jscraft.alt.marketdata.application.MarketDataSnapshots.InvestorFlowRow;
+import work.jscraft.alt.marketdata.application.MarketDataSnapshots.InvestorFlowSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.MinuteBar;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.OrderBookSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.PriceSnapshot;
@@ -64,10 +66,13 @@ public class KisMarketDataAdapter implements MarketDataGateway {
             "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice";
     private static final String PATH_INQUIRE_ASKING_PRICE =
             "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn";
+    private static final String PATH_INQUIRE_INVESTOR =
+            "/uapi/domestic-stock/v1/quotations/inquire-investor";
 
     private static final String TR_ID_PRICE = "FHKST01010100";
     private static final String TR_ID_MINUTE_BAR = "FHKST03010200";
     private static final String TR_ID_ORDERBOOK = "FHKST01010200";
+    private static final String TR_ID_INVESTOR = "FHKST01010900";
 
     private final KisProperties properties;
     private final KisAccessTokenService tokenService;
@@ -152,6 +157,55 @@ public class KisMarketDataAdapter implements MarketDataGateway {
                     "KIS 펀더멘털 응답 output 필드가 없다");
         }
         return new FundamentalSnapshot(symbolCode, nowKst(), output, VENDOR);
+    }
+
+    @Override
+    public InvestorFlowSnapshot fetchInvestorFlow(String symbolCode) {
+        requireSymbol(symbolCode);
+        String url = UriComponentsBuilder
+                .fromUriString(properties.getBaseUrl())
+                .path(PATH_INQUIRE_INVESTOR)
+                .queryParam("fid_cond_mrkt_div_code", "J")
+                .queryParam("fid_input_iscd", symbolCode)
+                .build()
+                .toUriString();
+
+        JsonNode root = getJsonWithTokenRotation(url, TR_ID_INVESTOR, Map.of(), "투자자 매매동향 조회");
+        JsonNode output = root.get("output");
+        if (output == null || output.isNull() || !output.isArray()) {
+            throw new MarketDataException(Category.INVALID_RESPONSE, VENDOR,
+                    "KIS 투자자 매매동향 응답 output 배열이 없다");
+        }
+        List<InvestorFlowRow> rows = new ArrayList<>();
+        for (JsonNode node : output) {
+            InvestorFlowRow row = toInvestorFlowRow(node);
+            if (row != null) {
+                rows.add(row);
+            }
+        }
+        return new InvestorFlowSnapshot(symbolCode, VENDOR, List.copyOf(rows));
+    }
+
+    private InvestorFlowRow toInvestorFlowRow(JsonNode node) {
+        String dateStr = textOrEmpty(node.get("stck_bsop_date")).trim();
+        if (dateStr.length() != 8) {
+            return null;
+        }
+        LocalDate tradeDate;
+        try {
+            tradeDate = LocalDate.parse(dateStr, BAR_DATE);
+        } catch (DateTimeParseException ex) {
+            return null;
+        }
+        return new InvestorFlowRow(
+                tradeDate,
+                parseInteger(node.get("stck_clpr")),
+                parseLong(node.get("prsn_ntby_qty")),
+                parseLong(node.get("frgn_ntby_qty")),
+                parseLong(node.get("orgn_ntby_qty")),
+                parseLong(node.get("prsn_ntby_tr_pbmn")),
+                parseLong(node.get("frgn_ntby_tr_pbmn")),
+                parseLong(node.get("orgn_ntby_tr_pbmn")));
     }
 
     @Override
@@ -503,6 +557,16 @@ public class KisMarketDataAdapter implements MarketDataGateway {
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    private static Long parseLong(JsonNode node) {
+        BigDecimal value = parseBigDecimal(node);
+        return value == null ? null : value.longValue();
+    }
+
+    private static Integer parseInteger(JsonNode node) {
+        BigDecimal value = parseBigDecimal(node);
+        return value == null ? null : value.intValue();
     }
 
     private static String textOrEmpty(JsonNode node) {

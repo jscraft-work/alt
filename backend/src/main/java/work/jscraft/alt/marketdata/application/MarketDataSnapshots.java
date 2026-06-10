@@ -1,7 +1,9 @@
 package work.jscraft.alt.marketdata.application;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -48,5 +50,26 @@ public final class MarketDataSnapshots {
             OffsetDateTime snapshotAt,
             JsonNode rawOutput,
             String sourceName) {
+    }
+
+    /**
+     * KIS inquire-investor (FHKST01010900) 응답의 종목별 일별 투자자 순매수 한 행.
+     * 수량은 주, 거래대금({@code *NtbyAmt})은 백만원 단위.
+     */
+    public record InvestorFlowRow(
+            LocalDate tradeDate,
+            Integer closePrice,
+            Long indvNtbyQty,
+            Long frgnNtbyQty,
+            Long orgnNtbyQty,
+            Long indvNtbyAmt,
+            Long frgnNtbyAmt,
+            Long orgnNtbyAmt) {
+    }
+
+    public record InvestorFlowSnapshot(
+            String symbolCode,
+            String sourceName,
+            List<InvestorFlowRow> rows) {
     }
 }

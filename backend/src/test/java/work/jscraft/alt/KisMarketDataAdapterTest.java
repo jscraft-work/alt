@@ -30,6 +30,7 @@ import work.jscraft.alt.integrations.kis.KisProperties;
 import work.jscraft.alt.integrations.kis.marketdata.KisMarketDataAdapter;
 import work.jscraft.alt.marketdata.application.MarketDataException;
 import work.jscraft.alt.marketdata.application.MarketDataException.Category;
+import work.jscraft.alt.marketdata.application.MarketDataSnapshots.InvestorFlowSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.MinuteBar;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.OrderBookSnapshot;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.PriceSnapshot;
@@ -445,6 +446,87 @@ class KisMarketDataAdapterTest {
         KisMarketDataAdapter adapter = newAdapter(new CountingTokenService("tok-ob"));
 
         assertThatThrownBy(() -> adapter.fetchOrderBook(""))
+                .isInstanceOf(MarketDataException.class)
+                .satisfies(ex -> assertThat(((MarketDataException) ex).getCategory())
+                        .isEqualTo(Category.REQUEST_INVALID));
+        assertThat(calls.get()).isEqualTo(0);
+    }
+
+    // -----------------------------------------------------------------
+    // fetchInvestorFlow
+    // -----------------------------------------------------------------
+
+    @Test
+    void fetchInvestorFlowHappyReturnsMappedRows() {
+        AtomicReference<RequestCapture> captured = new AtomicReference<>();
+        String body = """
+                {
+                  "rt_cd": "0", "msg_cd": "MCA00000", "msg1": "OK",
+                  "output": [
+                    {"stck_bsop_date":"20260610","stck_clpr":"38150",
+                     "prsn_ntby_qty":"643956","frgn_ntby_qty":"-393694","orgn_ntby_qty":"-268096",
+                     "prsn_ntby_tr_pbmn":"24451","frgn_ntby_tr_pbmn":"-14906","orgn_ntby_tr_pbmn":"-10218"},
+                    {"stck_bsop_date":"20260609","stck_clpr":"39500",
+                     "prsn_ntby_qty":"-425624","frgn_ntby_qty":"333348","orgn_ntby_qty":"93011",
+                     "prsn_ntby_tr_pbmn":"-16841","frgn_ntby_tr_pbmn":"13188","orgn_ntby_tr_pbmn":"3684"}
+                  ]
+                }
+                """;
+        server.createContext("/uapi/domestic-stock/v1/quotations/inquire-investor",
+                recorder(captured, 200, body, ""));
+
+        KisMarketDataAdapter adapter = newAdapter(new CountingTokenService("tok-inv"));
+
+        InvestorFlowSnapshot snap = adapter.fetchInvestorFlow(SYMBOL);
+
+        assertThat(snap.symbolCode()).isEqualTo(SYMBOL);
+        assertThat(snap.sourceName()).isEqualTo("kis");
+        assertThat(snap.rows()).hasSize(2);
+
+        var first = snap.rows().get(0);
+        assertThat(first.tradeDate()).isEqualTo(LocalDate.of(2026, 6, 10));
+        assertThat(first.closePrice()).isEqualTo(38150);
+        assertThat(first.indvNtbyQty()).isEqualTo(643956L);
+        assertThat(first.frgnNtbyQty()).isEqualTo(-393694L);
+        assertThat(first.orgnNtbyQty()).isEqualTo(-268096L);
+        assertThat(first.indvNtbyAmt()).isEqualTo(24451L);
+        assertThat(first.frgnNtbyAmt()).isEqualTo(-14906L);
+        assertThat(first.orgnNtbyAmt()).isEqualTo(-10218L);
+
+        assertThat(snap.rows().get(1).tradeDate()).isEqualTo(LocalDate.of(2026, 6, 9));
+        assertThat(snap.rows().get(1).orgnNtbyQty()).isEqualTo(93011L);
+
+        RequestCapture cap = captured.get();
+        assertThat(cap.headers.get("tr_id")).isEqualTo("FHKST01010900");
+        assertThat(cap.query).contains("fid_cond_mrkt_div_code=J");
+        assertThat(cap.query).contains("fid_input_iscd=005930");
+    }
+
+    @Test
+    void fetchInvestorFlowInvalidWhenOutputNotArray() {
+        String body = "{\"rt_cd\":\"0\",\"msg_cd\":\"MCA00000\",\"msg1\":\"OK\",\"output\":{}}";
+        server.createContext("/uapi/domestic-stock/v1/quotations/inquire-investor",
+                exchange -> respondJson(exchange, 200, body, ""));
+
+        KisMarketDataAdapter adapter = newAdapter(new CountingTokenService("tok-inv"));
+
+        assertThatThrownBy(() -> adapter.fetchInvestorFlow(SYMBOL))
+                .isInstanceOf(MarketDataException.class)
+                .satisfies(ex -> assertThat(((MarketDataException) ex).getCategory())
+                        .isEqualTo(Category.INVALID_RESPONSE));
+    }
+
+    @Test
+    void fetchInvestorFlowBlankSymbolThrowsRequestInvalidNoHttp() {
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/uapi/domestic-stock/v1/quotations/inquire-investor", exchange -> {
+            calls.incrementAndGet();
+            respondJson(exchange, 200, "{}", "");
+        });
+
+        KisMarketDataAdapter adapter = newAdapter(new CountingTokenService("tok-inv"));
+
+        assertThatThrownBy(() -> adapter.fetchInvestorFlow(" "))
                 .isInstanceOf(MarketDataException.class)
                 .satisfies(ex -> assertThat(((MarketDataException) ex).getCategory())
                         .isEqualTo(Category.REQUEST_INVALID));
