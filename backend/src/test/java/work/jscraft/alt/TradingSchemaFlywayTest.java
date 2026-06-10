@@ -35,7 +35,7 @@ class TradingSchemaFlywayTest {
                     .locations("classpath:db/migration")
                     .load();
 
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(18);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(19);
 
             try (Connection connection = DriverManager.getConnection(
                     jdbcUrl(databaseName),
@@ -44,7 +44,7 @@ class TradingSchemaFlywayTest {
                  Statement statement = connection.createStatement()) {
 
                 assertThat(singleInt(statement, "select count(*) from flyway_schema_history where success = true"))
-                        .isEqualTo(18);
+                        .isEqualTo(19);
                 assertThat(regclass(statement, "strategy_instance")).isEqualTo("strategy_instance");
                 assertThat(regclass(statement, "strategy_instance_prompt_version"))
                         .isEqualTo("strategy_instance_prompt_version");
@@ -87,6 +87,15 @@ class TradingSchemaFlywayTest {
                 assertThat(columnExists(statement, "paper_trade_match", "matched_quantity")).isTrue();
                 assertThat(columnExists(statement, "paper_trade_match", "gross_pnl_pct")).isTrue();
                 assertThat(columnExists(statement, "paper_trade_match", "net_pnl_pct")).isTrue();
+
+                // V19: market_investor_flow_item 신규 테이블 (개인/외국인/기관 일별 순매수)
+                assertThat(regclass(statement, "market_investor_flow_item"))
+                        .isEqualTo("market_investor_flow_item");
+                assertThat(columnExists(statement, "market_investor_flow_item", "trade_date")).isTrue();
+                assertThat(columnExists(statement, "market_investor_flow_item", "indv_ntby_qty")).isTrue();
+                assertThat(columnExists(statement, "market_investor_flow_item", "frgn_ntby_qty")).isTrue();
+                assertThat(columnExists(statement, "market_investor_flow_item", "orgn_ntby_qty")).isTrue();
+                assertThat(columnExists(statement, "market_investor_flow_item", "orgn_ntby_amt")).isTrue();
             }
         } finally {
             dropDatabase(databaseName);
