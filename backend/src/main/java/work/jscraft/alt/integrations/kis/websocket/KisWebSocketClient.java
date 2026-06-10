@@ -5,6 +5,7 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -36,6 +37,8 @@ import org.springframework.stereotype.Component;
 import work.jscraft.alt.collector.application.marketdata.OrderBookRedisCache;
 import work.jscraft.alt.collector.application.marketdata.WebSocketStatusTracker;
 import work.jscraft.alt.integrations.kis.KisProperties;
+import work.jscraft.alt.ops.application.AlertEvent;
+import work.jscraft.alt.ops.application.AlertGateway;
 import work.jscraft.alt.integrations.kis.websocket.KisWebSocketFrameDecoder.ControlMessage;
 import work.jscraft.alt.integrations.kis.websocket.KisWebSocketFrameDecoder.DecodedFrame;
 import work.jscraft.alt.integrations.kis.websocket.KisWebSocketFrameDecoder.EncryptedFrame;
@@ -64,6 +67,8 @@ public class KisWebSocketClient {
     private final WebSocketStatusTracker statusTracker;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final AlertGateway alertGateway;
+    private final Clock clock;
 
     private final Set<String> subscribedCodes = ConcurrentHashMap.newKeySet();
     private final AtomicReference<WebSocket> activeSocket = new AtomicReference<>();
@@ -83,10 +88,12 @@ public class KisWebSocketClient {
             WebSocketStatusTracker statusTracker,
             ApplicationEventPublisher eventPublisher,
             ObjectMapper objectMapper,
+            AlertGateway alertGateway,
             Clock clock) {
         this(properties, approvalKeyService,
                 new KisWebSocketFrameDecoder(objectMapper, clock),
-                orderBookRedisCache, statusTracker, eventPublisher, objectMapper);
+                orderBookRedisCache, statusTracker, eventPublisher, objectMapper,
+                alertGateway, clock);
     }
 
     // Constructor for tests — explicit decoder.
@@ -97,7 +104,9 @@ public class KisWebSocketClient {
             OrderBookRedisCache orderBookRedisCache,
             WebSocketStatusTracker statusTracker,
             ApplicationEventPublisher eventPublisher,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            AlertGateway alertGateway,
+            Clock clock) {
         this.properties = properties;
         this.approvalKeyService = approvalKeyService;
         this.frameDecoder = frameDecoder;
@@ -105,6 +114,8 @@ public class KisWebSocketClient {
         this.statusTracker = statusTracker;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
+        this.alertGateway = alertGateway;
+        this.clock = clock;
         this.currentBackoffMillis.set(
                 Math.max(100L, properties.getWebsocket().getReconnectInitialBackoffMillis()));
     }
@@ -232,9 +243,12 @@ public class KisWebSocketClient {
     }
 
     private void runReconnectLoop() {
+        int consecutiveFailures = 0;
+        int maxAttempts = properties.getWebsocket().getReconnectMaxAttempts();
         while (runRequested && !Thread.currentThread().isInterrupted()) {
+            boolean established = false;
             try {
-                openOnce();
+                established = openOnce();
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 break;
@@ -244,18 +258,51 @@ public class KisWebSocketClient {
             if (!runRequested) {
                 break;
             }
+            if (established) {
+                // 정상 세션을 한 번이라도 맺었으면 실패 카운트 리셋 (드랍 후 재연결은 정상 동작)
+                consecutiveFailures = 0;
+            } else {
+                consecutiveFailures++;
+                if (maxAttempts > 0 && consecutiveFailures >= maxAttempts) {
+                    log.error("KIS WS 연속 {}회 연결 실패 — 재시도 중단 (수동 재기동 필요)", consecutiveFailures);
+                    alertConnectGiveUp(consecutiveFailures);
+                    runRequested = false;
+                    break;
+                }
+            }
             sleepBackoff();
             bumpBackoff();
         }
     }
 
-    private void openOnce() throws InterruptedException {
+    private void alertConnectGiveUp(int failures) {
+        if (alertGateway == null) {
+            return;
+        }
+        String wsUrl = properties.getWebsocket().getWsUrl();
+        try {
+            alertGateway.dispatch(new AlertEvent(
+                    AlertEvent.Severity.CRITICAL,
+                    "KIS WebSocket 연결 중단",
+                    "연속 " + failures + "회 연결 실패로 재시도를 멈췄습니다. 실시간 호가 수신이 끊겨"
+                            + " paper 체결이 전량 차단됩니다. 원인 확인 후 수동 재기동 필요 (ws-url=" + wsUrl + ")",
+                    OffsetDateTime.now(clock),
+                    Map.of("vendor", VENDOR, "wsUrl", wsUrl,
+                            "consecutiveFailures", Integer.toString(failures),
+                            "actionRequired", "manual_restart")));
+        } catch (RuntimeException ex) {
+            log.warn("KIS WS give-up 경보 발송 실패: {}", ex.getClass().getSimpleName());
+        }
+    }
+
+    /** @return true if a WebSocket session was established this attempt (even if it later dropped). */
+    private boolean openOnce() throws InterruptedException {
         String approvalKey;
         try {
             approvalKey = approvalKeyService.getApprovalKey();
         } catch (RuntimeException ex) {
             log.warn("KIS WS approval_key 발급 실패: {}", ex.getClass().getSimpleName());
-            return;
+            return false;
         }
 
         HttpClient http = HttpClient.newBuilder()
@@ -273,7 +320,7 @@ public class KisWebSocketClient {
                             new LoopListener());
         } catch (RuntimeException ex) {
             log.warn("KIS WS buildAsync 호출 실패: {}", ex.getClass().getSimpleName());
-            return;
+            return false;
         }
 
         WebSocket ws;
@@ -285,12 +332,12 @@ public class KisWebSocketClient {
             log.warn("KIS WS 연결 실패: {}", ee.getCause() == null
                     ? ee.getClass().getSimpleName() : ee.getCause().getClass().getSimpleName());
             statusTracker.recordDisconnected("connect failed");
-            return;
+            return false;
         } catch (java.util.concurrent.TimeoutException te) {
             log.warn("KIS WS 연결 타임아웃");
             statusTracker.recordDisconnected("connect timeout");
             future.cancel(true);
-            return;
+            return false;
         }
 
         activeSocket.set(ws);
@@ -310,6 +357,7 @@ public class KisWebSocketClient {
         while (runRequested && connected) {
             Thread.sleep(200L);
         }
+        return true;
     }
 
     private void sleepBackoff() {

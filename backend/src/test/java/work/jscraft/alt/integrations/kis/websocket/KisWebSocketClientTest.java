@@ -21,6 +21,7 @@ import work.jscraft.alt.collector.application.marketdata.OrderBookRedisCache;
 import work.jscraft.alt.collector.application.marketdata.WebSocketStatusTracker;
 import work.jscraft.alt.integrations.kis.KisProperties;
 import work.jscraft.alt.marketdata.application.MarketDataSnapshots.OrderBookSnapshot;
+import work.jscraft.alt.ops.application.AlertGateway;
 import work.jscraft.alt.ops.infrastructure.persistence.OpsEventRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,7 +68,9 @@ class KisWebSocketClientTest {
                 orderBookCache,
                 statusTracker,
                 publisher,
-                objectMapper);
+                objectMapper,
+                event -> AlertGateway.DispatchResult.SKIPPED_DISABLED,
+                FIXED_CLOCK);
     }
 
     @Test

@@ -98,10 +98,11 @@ app:
     token-timeout-seconds: ${KIS_TOKEN_TIMEOUT_SECONDS:10}
     token-safety-margin-seconds: ${KIS_TOKEN_SAFETY_MARGIN_SECONDS:300}
     websocket:
-      ws-url: ${KIS_WS_URL:ws://ops.koreainvestment.com:21000}
+      ws-url: ${KIS_WS_URL:ws://ops.koreainvestment.com:31000}
       approval-timeout-seconds: ${KIS_WS_APPROVAL_TIMEOUT_SECONDS:10}
       approval-safety-margin-seconds: ${KIS_WS_APPROVAL_SAFETY_MARGIN_SECONDS:3600}
       connect-timeout-seconds: ${KIS_WS_CONNECT_TIMEOUT_SECONDS:10}
       reconnect-initial-backoff-millis: ${KIS_WS_RECONNECT_INITIAL_BACKOFF_MILLIS:1000}
       reconnect-max-backoff-millis: ${KIS_WS_RECONNECT_MAX_BACKOFF_MILLIS:30000}
+      reconnect-max-attempts: ${KIS_WS_RECONNECT_MAX_ATTEMPTS:20}
       ping-interval-seconds: ${KIS_WS_PING_INTERVAL_SECONDS:30}

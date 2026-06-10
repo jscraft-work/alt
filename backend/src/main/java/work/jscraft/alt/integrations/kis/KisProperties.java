@@ -89,13 +89,16 @@ public class KisProperties {
 
     public static class WebSocket {
 
-        private String wsUrl = "ws://ops.koreainvestment.com:21000";
+        // 21000(실전) 핸드셰이크가 운영 IP에서 거부되어 일단 31000(모의)로 기본값. 호가는 동일 실시간 시장데이터.
+        private String wsUrl = "ws://ops.koreainvestment.com:31000";
         private int approvalTimeoutSeconds = 10;
         private String approvalCacheKeyPrefix = "kis:ws:approval:";
         private int approvalSafetyMarginSeconds = 3600;
         private int connectTimeoutSeconds = 10;
         private long reconnectInitialBackoffMillis = 1000L;
         private long reconnectMaxBackoffMillis = 30000L;
+        // 연속 연결 실패가 이 횟수에 도달하면 재시도를 중단하고 경보. 0 이하면 무한 재시도.
+        private int reconnectMaxAttempts = 20;
         private int pingIntervalSeconds = 30;
 
         public String getWsUrl() {
@@ -152,6 +155,14 @@ public class KisProperties {
 
         public void setReconnectMaxBackoffMillis(long reconnectMaxBackoffMillis) {
             this.reconnectMaxBackoffMillis = reconnectMaxBackoffMillis;
+        }
+
+        public int getReconnectMaxAttempts() {
+            return reconnectMaxAttempts;
+        }
+
+        public void setReconnectMaxAttempts(int reconnectMaxAttempts) {
+            this.reconnectMaxAttempts = reconnectMaxAttempts;
         }
 
         public int getPingIntervalSeconds() {
