@@ -32,10 +32,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import work.jscraft.alt.collector.application.marketdata.OrderBookRedisCache;
 import work.jscraft.alt.collector.application.marketdata.WebSocketStatusTracker;
+import work.jscraft.alt.common.config.ApplicationProfiles;
 import work.jscraft.alt.integrations.kis.KisProperties;
 import work.jscraft.alt.ops.application.AlertEvent;
 import work.jscraft.alt.ops.application.AlertGateway;
@@ -54,7 +56,10 @@ import work.jscraft.alt.integrations.kis.websocket.KisWebSocketFrameDecoder.Trad
  * coverage instead relies on the isolated decoder plus the {@link #handleIncomingText(String)}
  * dispatch hook.</p>
  */
+// KIS는 앱키당 WS 1세션만 허용 — 여러 컨테이너가 같은 appkey로 붙으면 "invalid approval"로 거부된다.
+// 실제 구독(WsSubscriptionReconciler)이 도는 collector-worker 하나만 WS를 소유한다.
 @Component
+@Profile(ApplicationProfiles.COLLECTOR_WORKER)
 public class KisWebSocketClient {
 
     private static final Logger log = LoggerFactory.getLogger(KisWebSocketClient.class);
