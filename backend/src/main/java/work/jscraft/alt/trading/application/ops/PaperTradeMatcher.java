@@ -118,14 +118,18 @@ public class PaperTradeMatcher {
                 .divide(buy.getRequestedPrice(), PCT_SCALE, RoundingMode.HALF_UP);
         match.setGrossPnlPct(grossPnlPct);
 
-        // matched_ratio per buy/sell — paper_actual_amount 의 비율 환산
+        // matched_ratio per buy/sell — paper_actual_amount 의 비율 환산.
+        // V17 이전 레거시 주문은 paper_actual_amount 가 null 이므로 체결가×수량으로 폴백한다
+        // (비용 분해 없음 → net ≈ gross). 폴백 없이 곱하면 NPE 로 SELL 트랜잭션이 통째로 롤백된다.
         BigDecimal buyMatchedRatio = matchedQuantity.divide(buy.getFilledQuantity(), PCT_SCALE, RoundingMode.HALF_UP);
         BigDecimal sellMatchedRatio = matchedQuantity.divide(sell.getFilledQuantity(), PCT_SCALE, RoundingMode.HALF_UP);
 
-        BigDecimal buyActualProRata = buy.getPaperActualAmount().multiply(buyMatchedRatio);
-        BigDecimal sellActualProRata = sell.getPaperActualAmount().multiply(sellMatchedRatio);
-        BigDecimal netPnlPct = sellActualProRata.subtract(buyActualProRata)
-                .divide(buyActualProRata, PCT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal buyActualProRata = actualAmount(buy).multiply(buyMatchedRatio);
+        BigDecimal sellActualProRata = actualAmount(sell).multiply(sellMatchedRatio);
+        BigDecimal netPnlPct = buyActualProRata.signum() == 0
+                ? grossPnlPct
+                : sellActualProRata.subtract(buyActualProRata)
+                        .divide(buyActualProRata, PCT_SCALE, RoundingMode.HALF_UP);
         match.setNetPnlPct(netPnlPct);
 
         // cost 메트릭 — buy/sell paper_*_amount 의 ratio (양수 / requested base)
@@ -148,5 +152,17 @@ public class PaperTradeMatcher {
 
     private static BigDecimal nullToZero(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    /**
+     * 체결 실현금액. V17 이후 주문은 {@code paper_actual_amount} 사용, V17 이전 레거시 주문은
+     * 그 값이 null 이라 체결가×수량으로 근사한다(비용 미반영). requested_price/filled_quantity 는
+     * 매칭 대상 주문에 항상 채워져 있다(위에서 이미 unguarded 로 사용).
+     */
+    private static BigDecimal actualAmount(TradeOrderEntity order) {
+        if (order.getPaperActualAmount() != null) {
+            return order.getPaperActualAmount();
+        }
+        return order.getRequestedPrice().multiply(order.getFilledQuantity());
     }
 }

@@ -17,6 +17,8 @@ import work.jscraft.alt.strategy.infrastructure.persistence.StrategyInstanceWatc
 import work.jscraft.alt.trading.application.cycle.CycleExecutionOrchestrator;
 import work.jscraft.alt.trading.infrastructure.persistence.PaperTradeMatchEntity;
 import work.jscraft.alt.trading.infrastructure.persistence.PaperTradeMatchRepository;
+import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderEntity;
+import work.jscraft.alt.trading.infrastructure.persistence.TradeOrderRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,6 +45,9 @@ class PaperTradeMatcherIT extends TradingCycleIntegrationTestSupport {
 
     @Autowired
     private PaperTradeMatchRepository paperTradeMatchRepository;
+
+    @Autowired
+    private TradeOrderRepository tradeOrderRepository;
 
     @BeforeEach
     void setUp() {
@@ -176,6 +181,53 @@ class PaperTradeMatcherIT extends TradingCycleIntegrationTestSupport {
         assertThat(matches).hasSize(1);
         // BUY 5 주 중 3 주만 매칭 — 잔량 2 주 남음
         assertThat(matches.get(0).getMatchedQuantity()).isEqualByComparingTo("3");
+    }
+
+    /**
+     * 회귀: V17 이전 레거시 매수 주문은 {@code paper_actual_amount} 가 null 이다. SELL 매칭 시
+     * 그 값을 곱하다 NPE 가 나면 SELL 트랜잭션이 통째로 롤백되어 "팔자 판단은 나오는데 안 팔리는" 증상이 된다.
+     * 폴백(체결가×수량) 으로 NPE 없이 매칭·체결이 완료돼야 한다.
+     */
+    @Test
+    void sellMatchesLegacyBuyWithNullActualAmount_completesWithoutNpe() {
+        StrategyInstanceEntity instance = createActiveInstance("KR 레거시", "paper");
+        AssetMasterEntity samsung = createAsset("005930", "삼성전자", null);
+        addWatchlist(instance, samsung);
+        seedPortfolio(instance, new BigDecimal("5000000.0000"));
+
+        seedOrderbook("005930",
+                java.util.List.of(80_000L, 80_100L, 80_200L, 80_300L, 80_400L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L),
+                java.util.List.of(79_900L, 79_800L, 79_700L, 79_600L, 79_500L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L));
+        primeBuySingleOrder("005930", 5, 80_000);
+        orchestrator.runOnce(instance.getId(), "test-worker");
+
+        // 레거시 주문 시뮬레이션: 매수 주문의 paper_actual_amount 를 null 로 만든다.
+        List<TradeOrderEntity> buys = tradeOrderRepository.findAll();
+        assertThat(buys).hasSize(1);
+        TradeOrderEntity legacyBuy = buys.get(0);
+        legacyBuy.setPaperActualAmount(null);
+        tradeOrderRepository.saveAndFlush(legacyBuy);
+
+        // 30 분 후 SELL — 매칭이 null 매수와 일어나지만 NPE 없이 완료돼야 한다.
+        mutableClock.setInstant(Instant.parse("2026-05-11T01:30:00Z"));
+        seedOrderbook("005930",
+                java.util.List.of(81_100L, 81_200L, 81_300L, 81_400L, 81_500L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L),
+                java.util.List.of(81_000L, 80_900L, 80_800L, 80_700L, 80_600L),
+                java.util.List.of(100L, 100L, 100L, 100L, 100L));
+        primeSellSingleOrder("005930", 5, 81_000);
+        orchestrator.runOnce(instance.getId(), "test-worker");
+
+        // SELL 주문이 실제로 persist (롤백 안 됨) — buy + sell = 2 건
+        assertThat(tradeOrderRepository.findAll()).hasSize(2);
+        // 매칭 row 생성, net_pnl_pct 채워짐(NOT NULL 컬럼)
+        List<PaperTradeMatchEntity> matches = paperTradeMatchRepository.findAll();
+        assertThat(matches).hasSize(1);
+        assertThat(matches.get(0).getMatchedQuantity()).isEqualByComparingTo("5");
+        assertThat(matches.get(0).getNetPnlPct()).isNotNull();
+        assertThat(matches.get(0).getGrossPnlPct()).isEqualByComparingTo("0.012500");
     }
 
     private void primeBuySingleOrder(String symbolCode, int quantity, int price) {
