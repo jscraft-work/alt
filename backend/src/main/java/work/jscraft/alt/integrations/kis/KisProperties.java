@@ -97,7 +97,8 @@ public class KisProperties {
         private int connectTimeoutSeconds = 10;
         private long reconnectInitialBackoffMillis = 1000L;
         private long reconnectMaxBackoffMillis = 30000L;
-        // 연속 연결 실패가 이 횟수에 도달하면 재시도를 중단하고 경보. 0 이하면 무한 재시도.
+        // 장중 세션 내 연속 연결 실패가 이 횟수에 도달하면 재시도를 중단하고 경보. 0 이하면 무한 재시도.
+        // (세션은 09:00 연결 / 15:30 종료로 매일 새로 시작하므로, 중단돼도 다음 장에 자동 복구된다.)
         private int reconnectMaxAttempts = 20;
         private int pingIntervalSeconds = 30;
 

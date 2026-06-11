@@ -74,6 +74,29 @@ class KisWebSocketClientTest {
     }
 
     @Test
+    void withinMarketSession_trueOnlyDuringWeekdaySession() {
+        // 2026-05-11 = 월요일. 경계: 08:55~15:30 KST.
+        assertThat(clientAt("2026-05-11T00:30:00Z").withinMarketSession()).isTrue();   // 09:30 KST 월
+        assertThat(clientAt("2026-05-10T23:55:00Z").withinMarketSession()).isTrue();   // 08:55 KST 월 (개시 경계)
+        assertThat(clientAt("2026-05-10T23:50:00Z").withinMarketSession()).isFalse();  // 08:50 KST 월 (개시 전)
+        assertThat(clientAt("2026-05-11T06:30:00Z").withinMarketSession()).isFalse();  // 15:30 KST 월 (마감 경계, 제외)
+        assertThat(clientAt("2026-05-10T03:00:00Z").withinMarketSession()).isFalse();  // 일요일
+    }
+
+    private KisWebSocketClient clientAt(String instantUtc) {
+        return new KisWebSocketClient(
+                new KisProperties(),
+                approvalKeyService,
+                decoder,
+                orderBookCache,
+                statusTracker,
+                publisher,
+                objectMapper,
+                event -> AlertGateway.DispatchResult.SKIPPED_DISABLED,
+                Clock.fixed(Instant.parse(instantUtc), KST));
+    }
+
+    @Test
     void tradeFrameDispatchPublishesEventsAndRecordsTick() {
         String raw = "0|H0STCNT0|002|" + tradeFields("005930", "093015", 81000, 1500, 700, 800)
                 + "^" + tradeFields("000660", "093016", 200000, 200, 50, 60);

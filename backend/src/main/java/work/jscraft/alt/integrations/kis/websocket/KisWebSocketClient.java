@@ -4,8 +4,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -64,6 +68,13 @@ public class KisWebSocketClient {
 
     private static final Logger log = LoggerFactory.getLogger(KisWebSocketClient.class);
     private static final String VENDOR = "kis-ws";
+
+    // KIS 실시간 호가는 정규장(09:00~15:30)에만 흐른다. 그 시간에만 연결을 유지해 야간 좀비/점검 끊김을
+    // 피한다. 세션 시작/종료는 KisWebSocketSessionScheduler 가 connect()/disconnect() 로 구동하고,
+    // 이 창은 "장중 재기동 시 즉시 연결" 판단(onStart)에만 쓴다. 연결은 개장 직전 여유로 08:55 시작.
+    static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    static final LocalTime SESSION_OPEN = LocalTime.of(8, 55);
+    static final LocalTime SESSION_CLOSE = LocalTime.of(15, 30);
 
     private final KisProperties properties;
     private final KisApprovalKeyService approvalKeyService;
@@ -127,7 +138,23 @@ public class KisWebSocketClient {
 
     @PostConstruct
     void onStart() {
-        connect();
+        // 장중에 재기동되면 즉시 연결, 장 시간 외엔 스케줄러(09:00)가 열 때까지 idle.
+        if (withinMarketSession()) {
+            connect();
+        } else {
+            log.info("KIS WS 장 시간 외 기동 — 다음 개장(스케줄) 때 연결 예정");
+        }
+    }
+
+    /** 정규장 세션(평일 {@link #SESSION_OPEN}~{@link #SESSION_CLOSE}, KST) 안인지. */
+    public boolean withinMarketSession() {
+        ZonedDateTime now = ZonedDateTime.ofInstant(clock.instant(), KST);
+        DayOfWeek day = now.getDayOfWeek();
+        if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) {
+            return false;
+        }
+        LocalTime time = now.toLocalTime();
+        return !time.isBefore(SESSION_OPEN) && time.isBefore(SESSION_CLOSE);
     }
 
     @PreDestroy
